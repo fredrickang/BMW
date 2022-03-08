@@ -1,5 +1,7 @@
 *.o
 *.a
+app
+victim
 
 # OS Generated #
 .DS_Store*
