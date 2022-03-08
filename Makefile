@@ -1,18 +1,16 @@
-all: app victim libcuhooklib.so libchooklib.so
+all: app victim libcuhooklib.so 
 
-app: app.cu
-	nvcc -o app app.cu -cudart shared
+app: ./src/app/app.cu
+	nvcc -o app ./src/app/app.cu -cudart shared
 
-victim: victim.cu
-	nvcc -o victim victim.cu -cudart shared
+victim: ./src/app/victim.cu
+	nvcc -o victim ./src/app/victim.cu -cudart shared
 
-libcuhooklib.so: cuhooklib.cpp
-	g++ -I/usr/local/cuda/include -fPIC -shared -o libcuhooklib.so cuhooklib.cpp -ldl -L/usr/local/cuda/lib64 -lcudart
-
-libchooklib.so: chooklib.c
-	gcc -fPIC -shared -o libchooklib.so chooklib.c 
+libcuhooklib.so: ./src/hooklib/cuhooklib.cpp
+	g++ -I/usr/local/cuda/include -fPIC -shared -o libcuhooklib.so ./src/hooklib/cuhooklib.cpp -ldl -L/usr/local/cuda/lib64 -lcudart
 
 clean: 
 	rm -f app 
+	rm -f victim 
 	rm -f libcuhooklib.so
-	rm -f libchooklib.so
+
