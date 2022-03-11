@@ -23,13 +23,13 @@ __FILE__, __LINE__, __func__,getpid(), ##args)
 using namespace std;
 
 typedef struct _ENTRY{
-    const void * address;
+    const void* address;
     size_t size;
 }entry;
 
 static int entry_index = 0;
-static map<int,entry> gpu_m_entry;
-static map<int,const void*> cpu_m_entry;
+static map<int,entry> gpu_entry_list;
+static map<int,entry> cpu_entry_list;
 static int init = 0;
 int request_fd = -1;
 int decision_fd = -1;
@@ -67,9 +67,9 @@ void close_channels();
 void close_channel(char * pipe_name);
 void Cleanup();
 
-void Add_entry(const void* devPtr);
-void Del_entry(const void* devPtr);
-int find_index_by_ptr(const void* devPtr);
+void add_entry(map<int,entry> entry_list, int index, const void* devPtr, size_t size);
+void del_entry(map<int,entry> entry_list, const void* devPtr);
+int find_index_by_ptr(map<int,entry> entry_list, const void* devPtr);
 
 void sigint(int signum);
 char * getcudaAPIString(cudaAPI type);
@@ -95,7 +95,7 @@ cudaError_t cudaMalloc (void **devPtr, size_t size){
 
     SendRequest((const void *)*devPtr, _cudaMalloc_, cudaMemcpyHostToHost, size);
     err = lcudaMalloc(devPtr, size);
-    Add_entry((const void *)*devPtr, size);
+    add_entry((const void *)*devPtr, size);
     return err;
 }
 
@@ -109,12 +109,12 @@ cudaError_t cudaMemcpy (void* dst, const void* src, size_t count, cudaMemcpyKind
     if(kind == cudaMemcpyHostToDevice || kind == cudaMemcpyDeviceToDevice) {
         SendRequest((const void *)dst, _cudaMemcpy_, kind, count);
         err = lcudaMemcpy(dst, src, count, kind );
-        Add_entry((const void *)dst, count);
+        add_entry((const void *)dst, count);
     }
     if(kind == cudaMemcpyDeviceToHost){
        SendRequest((const void *)src, _cudaMemcpy_, kind, count); 
        err = lcudaMemcpy(dst, src, count, kind );
-       Del_entry((const void *)src);
+       del_entry((const void *)src);
     }
     
     return err;
@@ -129,12 +129,12 @@ cudaError_t cudaMemcpyAsync (void* dst, const void* src, size_t count, cudaMemcp
     if(kind == cudaMemcpyHostToDevice || kind == cudaMemcpyDeviceToDevice) {
         SendRequest((const void *)dst, _cudaMemcpyAsync_, kind, count);
         lcudaMemcpyAsync(dst, src, count, kind, str );
-        Add_entry((const void *)dst, count);
+        add_entry((const void *)dst, count);
     }
     if(kind == cudaMemcpyDeviceToHost){
        SendRequest((const void *)src, _cudaMemcpyAsync_, kind, count); 
        lcudaMemcpyAsync(dst, src, count, kind, str );
-       Del_entry((const void *)src);
+       del_entry((const void *)src);
     }  
 
     return err;
@@ -146,7 +146,7 @@ cudaError_t cudaFree(void* devPtr){ /* free */
     cudaError_t (*lcudaFree) (void*) = (cudaError_t (*) (void *))dlsym(RTLD_NEXT,"cudaFree");
     DEBUG_PRINT("cudaFree\n");
     SendRequest((const void *)devPtr, _cudaFree_, cudaMemcpyHostToHost, 0);
-    Del_entry((const void *)devPtr);
+    del_entry((const void *)devPtr);
 
     return lcudaFree(devPtr);
 }
@@ -214,39 +214,35 @@ int SendRequest(const void* devPtr, cudaAPI type, cudaMemcpyKind kind, size_t si
 
 void DEBUG_PRINT_ENTRY(){
     DEBUG_PRINT("Current Entry: ");
-    auto iter = gpu_m_entry.begin();
-    while(iter != gpu_m_entry.end()){
+    auto iter = gpu_entry_list.begin();
+    while(iter != gpu_entry_list.end()){
         fprintf(stderr, "{%d, [%p, %d]} ",iter->first, iter->second.address, iter->second.size);
         ++iter;
     }
     fprintf(stderr,"\n");
 }
 
-void Add_entry(const void* devPtr, size_t size){
-    //DEBUG_PRINT_ENTRY();
-    DEBUG_PRINT("Add entry: {%d, %p}\n", entry_index, devPtr);
+void add_entry(map<int,entry> entry_list, int index, const void* devPtr, size_t size){
+    DEBUG_PRINT("add entry: {%d, [%p %d]}\n", index, devPtr, size);
     entry tmp = {devPtr, size};
-    gpu_m_entry.insert({entry_index, tmp});
-    entry_index++;
-    //DEBUG_PRINT_ENTRY();
+    entry_list.insert({index, tmp});
 }
 
-void Del_entry(const void* devPtr){
-    //DEBUG_PRINT_ENTRY();
-    DEBUG_PRINT("Del entry: %p\n", devPtr);
-    gpu_m_entry.erase(find_index_by_ptr(devPtr));
-    //DEBUG_PRINT_ENTRY();
+void del_entry(map<int,entry> entry_list, const void* devPtr){
+    DEBUG_PRINT("del entry: %p\n", devPtr);
+    entry_list.erase(find_index_by_ptr(entry_list, devPtr));
 }
 
-int find_index_by_ptr(const void* ptr){
+
+int find_index_by_ptr(map<int,entry> entry_list, const void* ptr){
     //DEBUG_PRINT_ENTRY();
-    auto iter = gpu_m_entry.begin();
+    auto iter = entry_list.begin();
     
-    while(iter != gpu_m_entry.end() && iter->second.address != ptr ){
+    while(iter != entry_list.end() && iter->second.address != ptr ){
         ++iter;
     }
 
-    if(iter == gpu_m_entry.end() && iter->second.address != ptr) {
+    if(iter == entry_list.end() && iter->second.address != ptr) {
         DEBUG_PRINT("\x1b[31m""Can't find ptr inside entry\n""\x1b[0m");
         exit(-1);
     }
@@ -276,11 +272,23 @@ void sigint(int signum){
     evict_msg *msg = (evict_msg *)malloc(sizeof(evict_msg));
     read(decision_fd, msg, sizeof(int)*2); 
 
-    auto begin_iter = gpu_m_entry.find(msg->start_idx);
-    auto end_iter = gpu_m_entry.find(msg->end_idx);
+    cudaError_t err;
+    auto begin_iter = gpu_entry_list.find(msg->start_idx);
+    auto end_iter = gpu_entry_list.find(msg->end_idx);
     
     for(auto iter = begin_iter; iter!=end_iter; iter++){
         int index = iter->first;
+        const void* ptr = iter->second.address;
+        size_t size = iter->second.size;
+
+        // 1. allocate CPU memory
+        // 2. swap out the memory
+        // 3. update entry
+        char * cpu =(char *)malloc(size));
+        err = lcudaMemcpy(cpu, ptr, size, cudaMemcpyDeviceToHost); // error check logic need to add
+        
+        del_entry(gpu_entry_list, (const void *)ptr);
+        add_entry(cpu_entry_list, (const void *)cpu, index, size);
         
 
     }
