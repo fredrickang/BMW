@@ -224,20 +224,19 @@ _proc* choose_victim(_proc_list* proc_list, _proc* proc){
 void evictprotocal(_proc* proc, size_t size){
     size_t evict_size = 0;
     list<int> evict_entry_list;
-
+    DEBUG_PRINT("mem_current: %d\n",mem_current);
+    DEBUG_PRINT("size: %d\n",size);
+    DEBUG_PRINT("evict_size: %d\n",evict_size);
     // find evict pages
     auto iter  = proc->m_entry->begin();
-    while(iter != proc->m_entry->end() && (mem_current + size - evict_size < MEM_LIMIT)){
+    while(iter != proc->m_entry->end() && (mem_current + size - evict_size > MEM_LIMIT)){
         DEBUG_PRINT("iter info 1: %d, 2: %d\n",iter->first, iter->second);
         evict_entry_list.push_back(iter->first);
         evict_size += iter->second;
         ++iter;
     }
-
     // evict protocal
     // 1. wake the victim process
-    kill(proc->pid, SIGINT);
-
     // 2. send evict list
     int evict_entry_front = evict_entry_list.front();
     int evict_entry_back = evict_entry_list.back();
@@ -247,8 +246,17 @@ void evictprotocal(_proc* proc, size_t size){
     msg->start_idx = evict_entry_front;
     msg->end_idx = evict_entry_back;
 
-    write(proc->decision_fd, msg, sizeof(int)*2);
-    read(proc->request_fd, &ack , sizeof(int));
+    if(write(proc->decision_fd, msg, sizeof(int)*2) < 0){
+        DEBUG_PRINT("\x1b[31m""eviction protocal write failed\n""\x1b[0m");
+        exit(-1);
+    }
+    
+    kill(proc->pid, SIGUSR1);
+
+    if(read(proc->request_fd, &ack , sizeof(int)) < 0){
+        DEBUG_PRINT("\x1b[31m""eviction protocal read failed\n""\x1b[0m");
+        exit(-1);
+    }
 }
 
 int open_channel(char *pipe_name,int mode){

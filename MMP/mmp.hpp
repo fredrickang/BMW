@@ -19,6 +19,7 @@ typedef struct _PROC_INFO{
     int pid;
     int id;
     map<int,size_t> *m_entry;
+    map<int,size_t> *swap_entry;
     int request_fd;
     int decision_fd;
     struct _PROC_INFO *next;
