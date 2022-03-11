@@ -12,6 +12,6 @@ Swap out communication implementation done.
 
 
 
-TODO
-Synchronous or Asynchronous cudaMemcpy??
+TODO<br>
+Synchronous or Asynchronous cudaMemcpy??<br>
 Remove cudaMemcpy & cudaMemcpyAsync Hooking It is not required and makes things ugrly.
