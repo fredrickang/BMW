@@ -21,7 +21,6 @@ void request_handler(_proc_list * proc_list, _proc * proc);
 _proc *find_proc_by_pid(_proc_list *proc_list, int pid);
 int open_channel(char *pipe_name,int mode);
 char * getcudaAPIString(cudaAPI type);
-char * getcudaMemcpyKindString(int kind);
 void close_channel(int pid, char * pipe_name);
 void close_channels(int pid);
 _proc* choose_victim(_proc_list* proc_list, _proc* proc);

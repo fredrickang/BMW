@@ -162,15 +162,11 @@ void registration(_proc_list* proc_list, reg_msg *msg){
 
 void request_handler(_proc_list * proc_list, _proc * proc){
     req_msg *msg = (req_msg *)malloc(sizeof(req_msg));
-    read(proc->request_fd, msg, sizeof(int)*4);
+    read(proc->request_fd, msg, sizeof(int)*3);
 
-    if (msg->type == _cudaMemcpy_ || msg->type == _cudaMemcpyAsync_){
-        DEBUG_PRINT("\x1b[31m""[REQEUST %d/%d] Index: %d API: %s Kind: %s Size: %d\n""\x1b[0m" ,proc->id, proc->pid, msg->entry_index,getcudaAPIString(msg->type),getcudaMemcpyKindString(msg->kind), msg->size);
-    }
-    else {
-        DEBUG_PRINT("\x1b[31m""[REQEUST %d/%d] Index: %d API: %s Size: %d\n""\x1b[0m" , proc->id, proc->pid, msg->entry_index ,getcudaAPIString(msg->type), msg->size);
-    }
-    if(msg->type == _cudaMalloc_ || ((msg->type == _cudaMemcpy_ || msg->type == _cudaMemcpyAsync_) && (msg->kind == _cudaMemcpyHostToDevice_ || msg->kind == _cudaMemcpyDeviceToDevice_))){
+    DEBUG_PRINT("\x1b[31m""[REQEUST %d/%d] Index: %d API: %s Size: %d\n""\x1b[0m" , proc->id, proc->pid, msg->entry_index ,getcudaAPIString(msg->type), msg->size);
+
+    if(msg->type == _cudaMalloc_){
         /* Memory overflow handling */
         if(mem_current + msg->size > MEM_LIMIT){
             _proc* victim = choose_victim(proc_list, proc);
@@ -181,15 +177,13 @@ void request_handler(_proc_list * proc_list, _proc * proc){
             evictprotocal(victim, msg->size);
         }
         /* Update entry */
-
         proc->m_entry->insert(make_pair(msg->entry_index,msg->size));
 
         /* Update memory status */
         mem_current += msg->size;        
     }
 
-    if(msg->type == _cudaFree_ || ((msg->type == _cudaMemcpy_ || msg->type == _cudaMemcpyAsync_) && msg->kind == _cudaMemcpyDeviceToHost_)){
-        
+    if(msg->type == _cudaFree_){
         mem_current -= proc->m_entry->at(msg->entry_index);
         /* Update entry*/
         proc->m_entry->erase(msg->entry_index);
@@ -199,8 +193,6 @@ void request_handler(_proc_list * proc_list, _proc * proc){
     int ack = 1;
     write(proc->decision_fd, &ack, sizeof(int));
 }
-
-
 
 //  victim selection policy
 //  Current policy: Random except request one
@@ -224,9 +216,7 @@ _proc* choose_victim(_proc_list* proc_list, _proc* proc){
 void evictprotocal(_proc* proc, size_t size){
     size_t evict_size = 0;
     list<int> evict_entry_list;
-    DEBUG_PRINT("mem_current: %d\n",mem_current);
-    DEBUG_PRINT("size: %d\n",size);
-    DEBUG_PRINT("evict_size: %d\n",evict_size);
+
     // find evict pages
     auto iter  = proc->m_entry->begin();
     while(iter != proc->m_entry->end() && (mem_current + size - evict_size > MEM_LIMIT)){
@@ -253,6 +243,7 @@ void evictprotocal(_proc* proc, size_t size){
     
     kill(proc->pid, SIGUSR1);
 
+    /* Synchronous version */
     if(read(proc->request_fd, &ack , sizeof(int)) < 0){
         DEBUG_PRINT("\x1b[31m""eviction protocal read failed\n""\x1b[0m");
         exit(-1);
@@ -282,29 +273,11 @@ char * getcudaAPIString(cudaAPI type){
     switch (type){
         case _cudaMalloc_:
             return string(_cudaMalloc_);
-        case _cudaMemcpy_:
-            return string(_cudaMemcpy_);
-        case _cudaMemcpyAsync_:
-            return string(_cudaMemcpyAsync_);
         case _cudaFree_:
             return string(_cudaFree_);
     }
 }
 
-char * getcudaMemcpyKindString(int kind){
-    switch (kind){
-        case 0:
-            return string(_cudaMemcpyHostToHost_);
-        case 1:
-            return string(_cudaMemcpyHostToDevice_);
-        case 2:
-            return string(_cudaMemcpyDeviceToHost_);
-        case 3:
-            return string(_cudaMemcpyDeviceToDevice_);
-        case 4:
-            return string(_cudaMemcpyDefault_);
-    }
-}
 
 void close_channel(int pid, char * pipe_name){
     if ( unlink(pipe_name) == -1){

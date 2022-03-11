@@ -8,12 +8,8 @@
 using namespace std;
 
 typedef enum{
-    _cudaMalloc_, _cudaMemcpy_, _cudaMemcpyAsync_, _cudaFree_
+    _cudaMalloc_, _cudaFree_
 }cudaAPI;
-
-typedef enum {
-    _cudaMemcpyHostToHost_, _cudaMemcpyHostToDevice_, _cudaMemcpyDeviceToHost_, _cudaMemcpyDeviceToDevice_, _cudaMemcpyDefault_
-}cudaMemcpyKind;
 
 typedef struct _PROC_INFO{
     int pid;
@@ -37,7 +33,6 @@ typedef struct _MSG_PACKET_REGIST{
 
 typedef struct _MSG_PACKET_REQUEST{
     cudaAPI type; // Memory related function type (e.g. cudaMalloc, cudaMemcpy ...etc)
-    cudaMemcpyKind kind; // cudaMemcpy kind, if not cudamemcpy -1
     int entry_index;
     int size; // Memory request size
 }req_msg;
