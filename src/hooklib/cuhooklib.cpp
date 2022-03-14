@@ -286,8 +286,8 @@ void sigusr1(int signum){
 
     // swap out victim assumed always not currently scheduled. 
     // restore process state to sleep 
-    sigset_t myset;
-    sigsuspend(&myset);
+    // sigset_t myset;
+    // sigsuspend(&myset);
 }
 
 void add_swap_entry(map<int,gswap>* entry_list, int index, const void* gpuPtr, const void* cpuPtr, size_t size){
