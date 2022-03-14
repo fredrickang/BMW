@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <map>
+#include <list>
 
 #define REGISTRATION "/tmp/registration"
 #define string(x) #x
@@ -231,6 +232,7 @@ void sigusr1(int signum){
     
     int ack;
     cudaError_t err;
+    list<int> swap_list;
     evict_msg *msg = (evict_msg *)malloc(sizeof(evict_msg));
     
     
@@ -244,30 +246,32 @@ void sigusr1(int signum){
     auto begin_iter = gpu_entry_list.find(msg->start_idx);
     auto end_iter = gpu_entry_list.find(msg->end_idx);
     end_iter++;
-
-    DEBUG_PRINT("\x1b[31m""Swap out request [%d, %d]\n""\x1b[0m",msg->start_idx, msg->end_idx);
     
+    DEBUG_PRINT("\x1b[31m""Swap out request [%d, %d]\n""\x1b[0m",msg->start_idx, msg->end_idx);
+
     for(auto iter = begin_iter; iter!=end_iter; iter++){
         int index = iter->first;
+        swap_list.push_back(index);            
         const void* ptr = iter->second.address;
         size_t size = iter->second.size;
-        char * cpu =(char *)malloc(size);
+        
         /* Synchronous version */
+        char * cpu =(char *)malloc(size);
         err = cudaMemcpy(cpu, ptr, size, cudaMemcpyDeviceToHost); // error check logic need to add
+        
         add_swap_entry(&swap_entry_list, index, (const void *) ptr, (const void *)cpu, size);
-
+        lcudaFree((void *)ptr);
         DEBUG_PRINT("\x1b[31m""Swap out Address: %p\n""\x1b[0m", ptr);
+    }
+    
+    // erasing entry inside above for loop cuase an error
+    for(auto iter = swap_list.begin(); iter != swap_list.end(); iter++){
+        gpu_entry_list.erase(*iter);
     }
 
     if(write(request_fd, &ack, sizeof(int)) < 0){
         DEBUG_PRINT("\x1b[31m"" Signal handler write failed\n""\x1b[0m");
         exit(-1);
-    }
-
-    for(auto iter = begin_iter; iter!=end_iter; iter++){
-        const void* ptr = iter->second.address;
-        del_entry(&gpu_entry_list, ptr);
-        cudaFree((void *)ptr); 
     }
     /* !Synchronous version */
 

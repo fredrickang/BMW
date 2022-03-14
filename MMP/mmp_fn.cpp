@@ -14,8 +14,13 @@
 #include "mmp.hpp"
 #include "mmp_fn.hpp"
 
-#define string(x) #x
+#define BLUE "\x1b[34m" 
+#define GREEN "\x1b[32m" 
+#define RED "\x1b[31m"
+#define RESET "\x1b[0m" 
 
+
+#define string(x) #x
 #define MEM_LIMIT 40000
 
 static int mem_current = 0;
@@ -164,14 +169,14 @@ void request_handler(_proc_list * proc_list, _proc * proc){
     req_msg *msg = (req_msg *)malloc(sizeof(req_msg));
     read(proc->request_fd, msg, sizeof(int)*3);
 
-    DEBUG_PRINT("\x1b[31m""[REQEUST %d/%d] Index: %d API: %s Size: %d\n""\x1b[0m" , proc->id, proc->pid, msg->entry_index ,getcudaAPIString(msg->type), msg->size);
+    DEBUG_PRINT(GREEN"[REQEUST %d/%d] Index: %d API: %s Size: %d\n"RESET, proc->id, proc->pid, msg->entry_index ,getcudaAPIString(msg->type), msg->size);
 
     if(msg->type == _cudaMalloc_){
         /* Memory overflow handling */
         if(mem_current + msg->size > MEM_LIMIT){
             _proc* victim = choose_victim(proc_list, proc);
             if(victim == NULL){
-                DEBUG_PRINT("\x1b[31m""[Error] Victim not exist\n""\x1b[0m");
+                DEBUG_PRINT(RED"[Error] Victim not exist\n"RESET);
                 exit(-1);
             }
             evictprotocal(victim, msg->size);
@@ -220,10 +225,13 @@ void evictprotocal(_proc* proc, size_t size){
     // find evict pages
     auto iter  = proc->m_entry->begin();
     while(iter != proc->m_entry->end() && (mem_current + size - evict_size > MEM_LIMIT)){
-        DEBUG_PRINT("iter info 1: %d, 2: %d\n",iter->first, iter->second);
         evict_entry_list.push_back(iter->first);
         evict_size += iter->second;
         ++iter;
+    }
+    if(evict_entry_list.size() == 0){
+        DEBUG_PRINT(RED"Victim(%d) has no pages to swap out\n"RESET, proc->pid);
+        exit(-1);
     }
     // evict protocal
     // 1. wake the victim process
@@ -236,16 +244,24 @@ void evictprotocal(_proc* proc, size_t size){
     msg->start_idx = evict_entry_front;
     msg->end_idx = evict_entry_back;
 
+    DEBUG_PRINT(BLUE "[SWAP OUT] Victim: %d, Size: %d, Index: %d to %d\n" RESET, proc->pid, size, evict_entry_front, evict_entry_front);
+
     if(write(proc->decision_fd, msg, sizeof(int)*2) < 0){
-        DEBUG_PRINT("\x1b[31m""eviction protocal write failed\n""\x1b[0m");
+        DEBUG_PRINT(RED"eviction protocal write failed\n"RESET);
         exit(-1);
     }
     
     kill(proc->pid, SIGUSR1);
 
+    // m_entry update & mem_current update
+    for(auto iter = evict_entry_list.begin(); iter !=evict_entry_list.end(); iter++){
+        mem_current -= proc->m_entry->at(*iter);
+        proc->m_entry->erase(*iter);
+    }
+
     /* Synchronous version */
     if(read(proc->request_fd, &ack , sizeof(int)) < 0){
-        DEBUG_PRINT("\x1b[31m""eviction protocal read failed\n""\x1b[0m");
+        DEBUG_PRINT(RED"eviction protocal read failed\n"RESET);
         exit(-1);
     }
 }
@@ -257,11 +273,11 @@ int open_channel(char *pipe_name,int mode){
         remove(pipe_name);
 
     if( mkfifo(pipe_name, 0666) == -1){
-        DEBUG_PRINT("\x1b[31m""[ERROR]Fail to make pipe\n""\x1b[0m" );
+        DEBUG_PRINT(RED"[ERROR]Fail to make pipe\n"RESET );
         exit(-1);
     }
     if( (pipe_fd = open(pipe_name, mode)) < 0){
-        DEBUG_PRINT("\x1b[31m""[ERROR]Fail to open channel for %s\n""\x1b[0m" , pipe_name);
+        DEBUG_PRINT(RED"[ERROR]Fail to open channel for %s\n"RESET , pipe_name);
         exit(-1);
     }
     DEBUG_PRINT("Channel %s opened\n", pipe_name);
@@ -281,7 +297,7 @@ char * getcudaAPIString(cudaAPI type){
 
 void close_channel(int pid, char * pipe_name){
     if ( unlink(pipe_name) == -1){
-        DEBUG_PRINT("[%d] Fail to close channel %s\n", pid, pipe_name);
+        DEBUG_PRINT(RED"[%d] Fail to close channel %s\n"RESET, pid, pipe_name);
         exit(-1);
     }
     DEBUG_PRINT("[%d] Channel %s closed\n", pid, pipe_name);
@@ -305,3 +321,4 @@ _proc *find_proc_by_pid(_proc_list *proc_list, int pid){
     }
     return node;
 }   
+
