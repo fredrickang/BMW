@@ -18,11 +18,20 @@
 #define RED "\x1b[31m"
 #define RESET "\x1b[0m" 
 
+
+#define commErrchk(ans) {commAssert((ans), __FILE__, __LINE__);}
+inline void commAssert(int code, const char *file, int line, bool abort=true){
+    if(code < 0){
+        fprintf(stderr, RED"[customHook][%s:%3d]: [%d] CommError: %d\n"RESET,file,line, getpid(),code);
+        if (abort) exit(code);
+    }
+}
+
 #define DEBUG
 
 #ifdef DEBUG
 #define DEBUG_PRINT(fmt, args...) fprintf(stderr, "[customHook][%s:%3d:%20s()]: [%d] " fmt, \
-__FILE__, __LINE__, __func__,getpid(), ##args)
+__FILE__, __LINE__, __func__, getpid(), ##args)
 #else
 #define DEBUG_PRINT(fmt, args...)
 #endif
@@ -42,10 +51,12 @@ typedef struct _SWAP{
 
 static int init = 0;
 
- static int entry_index = 0;
+static bool SWAP_OUT = false;
+
+static int entry_index = 0;
 static  map<int,entry> gpu_entry_list;
 static map<int,gswap> swap_entry_list;
-static int swapped = 0;
+
 int request_fd = -1;
 int decision_fd = -1;
 int register_fd = -1;
@@ -124,7 +135,7 @@ cudaError_t cudaFree(void* devPtr){ /* free */
 void* swapThread(void *vargsp){
 
     sigset_t sigsetmask;
-    int signum;
+    int signum, ack;
 
     sigemptyset(&sigsetmask);
     sigaddset(&sigsetmask, SIGUSR1);
@@ -139,9 +150,15 @@ void* swapThread(void *vargsp){
         switch(signum){
             case SIGUSR1:
                 swapout(signum);
+                commErrchk(write(request_fd, &ack, sizeof(int)));
+                SWAP_OUT = true; // swapped flag on
                 break;
             case SIGUSR2:
-                swapin(signum);
+                if(SWAP_OUT){
+                    swapin(signum);
+                } 
+                commErrchk(write(request_fd, &ack, sizeof(int)));
+                SWAP_OUT = false;   // swapped flag off
                 break;
             case SIGTERM:
                 DEBUG_PRINT("Swap Thread Terminating\n");
@@ -170,11 +187,8 @@ void Init(){
     reg->reg_type = 1;
     reg->pid = getpid();
 
-    if(write(register_fd, reg, sizeof(int)*2) < 0){
-        DEBUG_PRINT("\x1b[31m""REGISTRATION FAIL\n""\x1b[0m");
-        exit(-1);
-    }
-
+    commErrchk(write(register_fd, reg, sizeof(int)*2))
+    
     DEBUG_PRINT("Registrated\n");
 
     char request[30];
@@ -208,16 +222,8 @@ int SendRequest(const void* devPtr, cudaAPI type, size_t size){
     if(type == _cudaMalloc_)  msg -> entry_index = entry_index;
     if(type == _cudaFree_)  msg -> entry_index = find_index_by_ptr(&gpu_entry_list, devPtr);
     
-    if(write(request_fd, msg, sizeof(int)*3) < 0){
-        DEBUG_PRINT("\x1b[31m""SendRequest WRITE fail [%s %d]\n""\x1b[0m" ,getcudaAPIString(type), size );
-        exit(-1);
-    }
-
-    if(read(decision_fd, &ack, sizeof(int)) < 0){
-        DEBUG_PRINT("\x1b[31m""SendRequest READ fail [%s %d]\n""\x1b[0m" , getcudaAPIString(type), size );
-        exit(-1);
-    }
-    
+    commErrchk(write(request_fd, msg, sizeof(int)*3));
+    commErrchk(read(decision_fd, &ack, sizeof(int)));
 }
 
 #ifdef DEBUG
@@ -278,10 +284,7 @@ void Cleanup(){
     reg_msg *reg = (reg_msg *)malloc(sizeof(reg_msg));
     reg->reg_type = 0;
     reg->pid = getpid();
-    if(write(register_fd, reg, sizeof(int)*2) < 0){
-        DEBUG_PRINT("\x1b[31m""DE-REGISTRATION FAIL\n""\x1b[0m");
-        exit(-1);
-    }
+    commErrchk(write(register_fd, reg, sizeof(int)*2));
     DEBUG_PRINT(" De-registration done\n");
 
 }
@@ -290,24 +293,32 @@ void Cleanup(){
 void swapin(int signum){
     DEBUG_PRINT("\x1b[31m""SIGUSR2 (Swap in) handler callback\n""\x1b[0m");
     // iterate swap entry list
+    for(auto iter = swap_entry_list.cbegin(); iter != swap_entry_list.cend(); ){
+        int index = iter->first;
+        void * devPtr = (void *)iter->second.gpu_address;
+        char * hosPtr = (char *)iter->second.cpu_address;
+        size_t size = iter->second.size;
 
+        cudaMalloc(&devPtr,size);
+        cudaMemcpy(devPtr, hosPtr, size, cudaMemcpyHostToDevice);
+        free(hosPtr);
+        swap_entry_list.erase(iter++);
+    }
 }
 
 
 /* Swap out handler */
 void swapout(int signum){
+    DEBUG_PRINT("\x1b[31m""SIGUSR1 (Swap out) handler callback\n""\x1b[0m");
+
     int ack;
     cudaError_t err;
     list<int> swap_list;
+    
     evict_msg *msg = (evict_msg *)malloc(sizeof(evict_msg));
-    
-    
-    DEBUG_PRINT("\x1b[31m""SIGUSR1 (Swap out) handler callback\n""\x1b[0m");
+    commErrchk(read(decision_fd, msg, sizeof(int)*2));
 
-    if(read(decision_fd, msg, sizeof(int)*2) < 0){
-        DEBUG_PRINT("\x1b[31m"" Signal handler read failed\n""\x1b[0m");
-        exit(-1);
-    }
+
     int start_idx = msg->start_idx;
     auto begin_iter = gpu_entry_list.find(msg->start_idx);
     auto end_iter = gpu_entry_list.find(msg->end_idx);
@@ -324,8 +335,7 @@ void swapout(int signum){
         /* Synchronous version */
         char * cpu =(char *)malloc(size);
         err = cudaMemcpy(cpu, ptr, size, cudaMemcpyDeviceToHost); // error check logic need to add
-        
-        add_swap_entry(&swap_entry_list, index, (const void *) ptr, (const void *)cpu, size);
+        add_swap_entry(&swap_entry_list, index, (const void *)ptr, (const void *)cpu, size);
         lcudaFree((void *)ptr);
         DEBUG_PRINT("\x1b[31m""Swap out Address: %p\n""\x1b[0m", ptr);
     }
@@ -335,13 +345,6 @@ void swapout(int signum){
         gpu_entry_list.erase(*iter);
     }
 
-    if(write(request_fd, &ack, sizeof(int)) < 0){
-        DEBUG_PRINT("\x1b[31m"" Signal handler write failed\n""\x1b[0m");
-        exit(-1);
-    }
-
-    // swapped flag on
-    swapped = 1;
 
     // swap out victim assumed always not currently scheduled. 
     // restore process state to sleep 
