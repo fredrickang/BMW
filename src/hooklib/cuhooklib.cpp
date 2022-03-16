@@ -8,9 +8,15 @@
 #include <signal.h>
 #include <map>
 #include <list>
+#include <pthread.h>
 
 #define REGISTRATION "/tmp/registration"
 #define string(x) #x
+
+#define BLUE "\x1b[34m" 
+#define GREEN "\x1b[32m" 
+#define RED "\x1b[31m"
+#define RESET "\x1b[0m" 
 
 #define DEBUG
 
@@ -34,13 +40,17 @@ typedef struct _SWAP{
     size_t size;
 }gswap;
 
-static int entry_index = 0;
-static map<int,entry> gpu_entry_list;
-static map<int,gswap> swap_entry_list;
 static int init = 0;
+
+ static int entry_index = 0;
+static  map<int,entry> gpu_entry_list;
+static map<int,gswap> swap_entry_list;
+static int swapped = 0;
 int request_fd = -1;
 int decision_fd = -1;
 int register_fd = -1;
+
+pthread_t swap_thread_id;
 
 typedef enum{
     _cudaMalloc_, _cudaFree_
@@ -78,9 +88,9 @@ void del_swap_entry(map<int,gswap>* entry_list, const void* devPtr);
 
 int find_index_by_ptr(map<int,entry>* entry_list, const void* devPtr);
 
-void sigusr1(int signum);
+void swapout(int signum);
+void swapin(int signum);
 void DEBUG_PRINT_ENTRY();
-
 
 /* CUDA memory hook */
 static cudaError_t (*lcudaMalloc)(void **, size_t) = (cudaError_t (*) (void**, size_t))dlsym(RTLD_NEXT,"cudaMalloc");
@@ -111,8 +121,46 @@ cudaError_t cudaFree(void* devPtr){ /* free */
     return lcudaFree(devPtr);
 }
 
+void* swapThread(void *vargsp){
+
+    sigset_t sigsetmask;
+    int signum;
+
+    sigemptyset(&sigsetmask);
+    sigaddset(&sigsetmask, SIGUSR1);
+    sigaddset(&sigsetmask, SIGUSR2);
+    sigaddset(&sigsetmask, SIGTERM);
+
+    while(1){
+        if(sigwait(&sigsetmask, &signum) > 0){
+            DEBUG_PRINT(RED"SIGWAIT Error\n"RESET);
+            exit(-1);
+        }
+        switch(signum){
+            case SIGUSR1:
+                swapout(signum);
+                break;
+            case SIGUSR2:
+                swapin(signum);
+                break;
+            case SIGTERM:
+                DEBUG_PRINT("Swap Thread Terminating\n");
+                exit(EXIT_SUCCESS);
+            default:
+                break;
+        }
+    }
+
+}
+
 void Init(){
-    signal(SIGUSR1, sigusr1);
+    
+    // Block other signals except SIGINT
+    sigset_t sigsetmask_main;
+    sigfillset(&sigsetmask_main);
+    sigdelset(&sigsetmask_main, SIGINT);
+    pthread_sigmask(SIG_SETMASK, &sigsetmask_main, NULL);
+
     if((register_fd = open(REGISTRATION, O_WRONLY)) < 0){
         DEBUG_PRINT("\x1b[31m""REGISTRATION CHANNEL OPEN FAIL\n""\x1b[0m");
         exit(-1);
@@ -142,6 +190,9 @@ void Init(){
     atexit(Cleanup);
     DEBUG_PRINT("Termination function registered\n");
     
+    pthread_create(&swap_thread_id, NULL, swapThread, NULL);
+    DEBUG_PRINT("Generating Swap Threads\n");
+
     DEBUG_PRINT_ENTRY();
 }
 
@@ -161,7 +212,6 @@ int SendRequest(const void* devPtr, cudaAPI type, size_t size){
         DEBUG_PRINT("\x1b[31m""SendRequest WRITE fail [%s %d]\n""\x1b[0m" ,getcudaAPIString(type), size );
         exit(-1);
     }
-    
 
     if(read(decision_fd, &ack, sizeof(int)) < 0){
         DEBUG_PRINT("\x1b[31m""SendRequest READ fail [%s %d]\n""\x1b[0m" , getcudaAPIString(type), size );
@@ -170,6 +220,7 @@ int SendRequest(const void* devPtr, cudaAPI type, size_t size){
     
 }
 
+#ifdef DEBUG
 void DEBUG_PRINT_ENTRY(){
     DEBUG_PRINT("Current Entry: ");
     auto iter = gpu_entry_list.begin();
@@ -179,6 +230,11 @@ void DEBUG_PRINT_ENTRY(){
     }
     fprintf(stderr,"\n");
 }
+#else
+void DEBUG_PRINT_ENTRY(){
+
+}
+#endif
 
 void add_entry(map<int,entry> *entry_list, int index, const void* devPtr, size_t size){
     DEBUG_PRINT("add entry: {%d, [%p, %d]}\n", index, devPtr, size);
@@ -215,6 +271,10 @@ int find_index_by_ptr(map<int,entry> *entry_list, const void* ptr){
 void Cleanup(){
     DEBUG_PRINT("Cleaning up...\n");
 
+    // kill(0, SIGTERM);
+    pthread_join(swap_thread_id, NULL);
+    DEBUG_PRINT("Swap Thread terminated\n");
+
     reg_msg *reg = (reg_msg *)malloc(sizeof(reg_msg));
     reg->reg_type = 0;
     reg->pid = getpid();
@@ -226,10 +286,16 @@ void Cleanup(){
 
 }
 
+/* Swap in handler */
+void swapin(int signum){
+    DEBUG_PRINT("\x1b[31m""SIGUSR2 (Swap in) handler callback\n""\x1b[0m");
+    // iterate swap entry list
+
+}
+
+
 /* Swap out handler */
-void sigusr1(int signum){
-    signal(SIGUSR1, sigusr1);
-    
+void swapout(int signum){
     int ack;
     cudaError_t err;
     list<int> swap_list;
@@ -242,7 +308,7 @@ void sigusr1(int signum){
         DEBUG_PRINT("\x1b[31m"" Signal handler read failed\n""\x1b[0m");
         exit(-1);
     }
-
+    int start_idx = msg->start_idx;
     auto begin_iter = gpu_entry_list.find(msg->start_idx);
     auto end_iter = gpu_entry_list.find(msg->end_idx);
     end_iter++;
@@ -273,16 +339,9 @@ void sigusr1(int signum){
         DEBUG_PRINT("\x1b[31m"" Signal handler write failed\n""\x1b[0m");
         exit(-1);
     }
-    /* !Synchronous version */
 
-    //     /* Asynchronous version */
-    //     err = cudaMemcpyAsync(cpu, ptr, size, cudaMemcpyDeviceToHost);
-    //     add_entry(&swap_entry_list, index, (const void *)cpu, size);
-
-    //     DEBUG_PRINT("\x1b[31m""Swap out Address: %p\n""\x1b[0m", ptr);
-
-    //     cudaFree((void *)ptr);
-    // }
+    // swapped flag on
+    swapped = 1;
 
     // swap out victim assumed always not currently scheduled. 
     // restore process state to sleep 
