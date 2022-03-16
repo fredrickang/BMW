@@ -299,7 +299,7 @@ void swapin(int signum){
         char * hosPtr = (char *)iter->second.cpu_address;
         size_t size = iter->second.size;
 
-        cudaMalloc(&devPtr,size);
+        lcudaMalloc(&devPtr,size);
         cudaMemcpy(devPtr, hosPtr, size, cudaMemcpyHostToDevice);
         free(hosPtr);
         swap_entry_list.erase(iter++);

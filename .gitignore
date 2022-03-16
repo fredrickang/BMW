@@ -5,6 +5,7 @@ app
 victim
 
 # OS Generated #
+.vscode
 .DS_Store*
 ehthumbs.db
 Icon?
