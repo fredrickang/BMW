@@ -50,6 +50,7 @@ double what_time_is_it_now()
 }
 
 int main(int argc, char **argv){
+    int sync = find_int_arg(argc, argv, "-sync", 0);
     set_priority(50); 
     set_affinity(0);
     
@@ -81,9 +82,14 @@ int main(int argc, char **argv){
                 if(FD_ISSET(task->request_fd, &readfds))
                     request_handler(task_list, task, gpu, current_time);
 
-            if(gpu -> state == IDLE) target_pid = dequeue(gpu->waiting, current_time, gpu);
-            if(target_pid != -1) decision_handler(target_pid, task_list);
-
+            if(!(gpu->waiting->count < sync)){
+                if(sync){
+                    send_release_time(task_list,current_time);
+                    sync = 0;
+                }
+                if(gpu -> state == IDLE) target_pid = dequeue(gpu->waiting, current_time, gpu);
+                if(target_pid != -1) decision_handler(target_pid, task_list);
+            }
         }
     }while(!(task_list -> count == 0)); 
 }   

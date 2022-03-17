@@ -13,7 +13,7 @@
 #include "scheduler_fn.h"
 
 #define DEBUG
-#define REG_MSG_SIZE 4
+#define REG_MSG_SIZE 3
 
 #define BLUE "\x1b[34m" 
 #define GREEN "\x1b[32m" 
@@ -182,7 +182,7 @@ int enqueue(queue_t *q, int pid, int priority){
 
 int dequeue(queue_t *q, double current_time, resource_t *res){
     if (q -> front == NULL){
-        DEBUG_PRINT(RED"Waiting Queue empty\n"RESET);
+        //DEBUG_PRINT(RED"Waiting Queue empty\n"RESET);
         return -1;
     }
     
@@ -205,6 +205,7 @@ int dequeue(queue_t *q, double current_time, resource_t *res){
 void send_release_time(task_list_t *task_list, double current_time){
     struct timespec release_time;
     clock_gettime(CLOCK_MONOTONIC, &release_time);
+
     for(task_info_t * node = task_list -> head ; node != NULL ; node = node -> next){
         if(write(node->decision_fd, &release_time,sizeof(struct timespec)) < 0)
             perror("decision_handler");  
@@ -273,10 +274,12 @@ void request_handler(task_list_t *task_list, task_info_t *task, resource_t *res,
     commErrchk(read(task -> request_fd, &ack, sizeof(int)*1));
 
     if( res -> state == BUSY && res -> pid == task->pid){ /* Job termniation */
+        DEBUG_PRINT(RED"Term Job(%d)\n"RESET,task->priority);
         res -> state = IDLE;
         res -> pid = -1;
     }
     else{ /* Job release */
+        DEBUG_PRINT(RED"Release Job(%d)\n"RESET,task->priority);
         enqueue(res->waiting,task->pid, task->priority);
     }
 
@@ -285,9 +288,9 @@ void request_handler(task_list_t *task_list, task_info_t *task, resource_t *res,
 void decision_handler(int target_pid, task_list_t *task_list){
 
     int ack = 0;
-    
     task_info_t *target = find_task_by_pid(task_list, target_pid);
-    
+
+    DEBUG_PRINT(RED"Scheduled Job(%d)\n"RESET,target->priority);    
     commErrchk(write(target->decision_fd,&ack,sizeof(int)));
 }
 
