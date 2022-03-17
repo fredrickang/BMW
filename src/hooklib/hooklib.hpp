@@ -10,9 +10,9 @@
 #include <list>
 #include <pthread.h>
 
-#define BLUE "\x1b[34m" 
-#define GREEN "\x1b[32m" 
-#define RED "\x1b[31m"
+#define BLUE "\x1b[34m"  //info 
+#define GREEN "\x1b[32m" //highlight
+#define RED "\x1b[31m" // error
 #define RESET "\x1b[0m" 
 
 #define DEBUG
@@ -30,10 +30,6 @@ __FILE__, __LINE__, __func__, getpid(), ##args)
 #else
 #define DEBUG_PRINT(fmt, args...)
 #endif
-
-
-
-
 
 #define REGISTRATION "/tmp/mmp"
 #define string(x) #x

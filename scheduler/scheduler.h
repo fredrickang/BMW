@@ -45,4 +45,9 @@ typedef struct _RESOURCE{
     queue_t *waiting;
     int pid;
 }resource_t;
+
+typedef struct _MSG_PACKET_SCH{
+    int pid;
+}sch_msg;
+
 #endif

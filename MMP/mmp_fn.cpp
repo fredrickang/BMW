@@ -105,7 +105,7 @@ void de_register_proc(_proc_list* proc_list, _proc * target){
         proc_list->head = target->next;
         free(target);
         proc_list->count--;
-        DEBUG_PRINT("De-registration: [id] %d [pid] %d\n", target_id, target_pid);
+        DEBUG_PRINT(BLUE"De-registration: [id] %d [pid] %d\n"RESET, target_id, target_pid);
         return;
     }
     tmp = proc_list->head;
@@ -116,7 +116,7 @@ void de_register_proc(_proc_list* proc_list, _proc * target){
     prev->next = target->next;
     free(target);
     proc_list->count--;
-    DEBUG_PRINT("De-registration: [id] %d [pid] %d\n", target_id, target_pid);
+    DEBUG_PRINT(BLUE"De-registration: [id] %d [pid] %d\n"RESET, target_id, target_pid);
     return;
 }
 
@@ -124,13 +124,13 @@ void de_register_proc(_proc_list* proc_list, _proc * target){
 void DEBUG_PRINT_PROCS(_proc_list * proc_list){
     _proc * head = proc_list -> head;
     
-    if (head == NULL) DEBUG_PRINT("Nothing registered");
-    DEBUG_PRINT("Process list: ")
+    if (head == NULL) DEBUG_PRINT(BLUE"Nothing registered"RESET);
+    DEBUG_PRINT(BLUE"Process list: ")
     while( head != NULL){
         fprintf(stderr, "{%d / %d} ", head->id, head->pid);
         head = head->next;
     }
-    fprintf(stderr, "\n");
+    fprintf(stderr, "\n"RESET);
 }
 
 void registration(_proc_list* proc_list, reg_msg *msg){
@@ -139,7 +139,7 @@ void registration(_proc_list* proc_list, reg_msg *msg){
     proc -> pid = msg -> pid;
     proc -> m_entry = new map<int, size_t>();
 
-    DEBUG_PRINT("Registration: [id] %d [pid] %d\n", proc->id, proc->pid);
+    DEBUG_PRINT(BLUE"Registration: [id] %d [pid] %d\n"RESET, proc->id, proc->pid);
 
     char req_fd_name[30];
     char dec_fd_name[30];
@@ -150,7 +150,7 @@ void registration(_proc_list* proc_list, reg_msg *msg){
     proc -> request_fd = open_channel(req_fd_name, O_RDONLY);
     proc -> decision_fd = open_channel(dec_fd_name, O_WRONLY);
 
-    DEBUG_PRINT("Reqeust/decision channel opened [id] %d [pid] %d\n", proc->id, proc->pid);
+    DEBUG_PRINT(BLUE"Reqeust/decision channel opened [id] %d [pid] %d\n"RESET, proc->id, proc->pid);
 
     proc -> next = NULL;
 
@@ -165,12 +165,13 @@ void registration(_proc_list* proc_list, reg_msg *msg){
 
 cudaAPI request_handler(_proc_list * proc_list, _proc * proc){
     req_msg *msg = (req_msg *)malloc(sizeof(req_msg));
-    read(proc->request_fd, msg, sizeof(int)*REQ_MSG_SIZE);
+    
+    commErrchk(read(proc->request_fd, msg, sizeof(int)*REQ_MSG_SIZE));
 
     DEBUG_PRINT(GREEN"[REQEUST %d/%d] Index: %3d API: %15s Size: %5d\n"RESET, proc->id, proc->pid, msg->entry_index ,getcudaAPIString(msg->type), msg->size);
     
     if(msg->type == _Done_){
-        DEBUG_PRINT(BLUE"Swap-in/out Done\n"RESET);
+        DEBUG_PRINT(GREEN"Swap-in/out Done\n"RESET);
         return _Done_;
     }
 
@@ -199,7 +200,7 @@ cudaAPI request_handler(_proc_list * proc_list, _proc * proc){
     }    
     /* memory handling done! go do what ever you requested */
     int ack = 1;
-    write(proc->decision_fd, &ack, sizeof(int));
+    commErrchk(write(proc->decision_fd, &ack, sizeof(int)));
     return msg->type;
 }
 
@@ -248,13 +249,10 @@ void swapout(_proc_list* proc_list, _proc* proc, size_t size){
     msg->start_idx = evict_entry_front;
     msg->end_idx = evict_entry_back;
 
-    DEBUG_PRINT(BLUE "[SWAP OUT] Victim: %d, Size: %d, Index: %d to %d\n" RESET, proc->pid, size, evict_entry_front, evict_entry_front);
+    DEBUG_PRINT(GREEN "[SWAP OUT] Victim: %d, Size: %d, Index: %d to %d\n" RESET, proc->pid, size, evict_entry_front, evict_entry_front);
 
-    if(write(proc->decision_fd, msg, sizeof(int)*2) < 0){
-        DEBUG_PRINT(RED"eviction protocal write failed\n"RESET);
-        exit(-1);
-    }
-    
+    commErrchk(write(proc->decision_fd, msg, sizeof(int)*EVI_MSG_SIZE));    
+   
     kill(proc->pid, SIGUSR1);
 
     cudaAPI ret;
@@ -294,7 +292,7 @@ int open_channel(char *pipe_name,int mode){
         DEBUG_PRINT(RED"[ERROR]Fail to open channel for %s\n"RESET , pipe_name);
         exit(-1);
     }
-    DEBUG_PRINT("Channel %s opened\n", pipe_name);
+    DEBUG_PRINT(BLUE"Channel %s opened\n"RESET, pipe_name);
    
    return pipe_fd;
 }
@@ -316,7 +314,7 @@ void close_channel(int pid, char * pipe_name){
         DEBUG_PRINT(RED"[%d] Fail to close channel %s\n"RESET, pid, pipe_name);
         exit(-1);
     }
-    DEBUG_PRINT("[%d] Channel %s closed\n", pid, pipe_name);
+    DEBUG_PRINT(BLUE"[%d] Channel %s closed\n"RESET, pid, pipe_name);
 }
 
 void close_channels(int pid){

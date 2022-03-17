@@ -17,8 +17,11 @@
 #include "scheduler_fn.h"
 
 #define REGISTRATION strdup("/tmp/scheduler")
-#define MMP2REG strdup("/tmp/mmp2reg")
-#define REG2MMP strdup("/tmp/reg2mmp")
+#define MMP2SCH strdup("/tmp/mmp2sch")
+#define SCH2MMP strdup("/tmp/sch2mmp")
+
+int mmp2sch_fd = -1;
+int sch2mmp_fd = -1;
 
 void del_arg(int argc, char **argv, int index)
 {
@@ -62,6 +65,9 @@ int main(int argc, char **argv){
     gpu = create_resource();
         
     int reg_fd = open_channel(REGISTRATION, O_RDONLY | O_NONBLOCK);
+
+    mmp2sch_fd = open_channel(MMP2SCH, O_RDONLY);
+    sch2mmp_fd = open_channel(SCH2MMP, O_WRONLY);
     
     double current_time;
     int target_pid;

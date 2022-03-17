@@ -15,11 +15,13 @@
 #define DEBUG
 #define REG_MSG_SIZE 3
 
-#define BLUE "\x1b[34m" 
-#define GREEN "\x1b[32m" 
-#define RED "\x1b[31m"
+#define BLUE "\x1b[34m" //info
+#define GREEN "\x1b[32m" // highlight
+#define RED "\x1b[31m" // error
 #define RESET "\x1b[0m" 
 
+extern int mmp2sch_fd;
+extern int sch2mmp_fd;
 
 #define commErrchk(ans) {commAssert((ans), __FILE__, __LINE__);}
 inline void commAssert(int code, const char *file, int line){
@@ -155,7 +157,7 @@ queue_t *create_queue(){
 }
 
 int enqueue(queue_t *q, int pid, int priority){
-    DEBUG_PRINT(GREEN"Enqueue Job(%d %d)\n"RESET,pid, priority);
+    DEBUG_PRINT(BLUE"Enqueue Job(%d %d)\n"RESET,pid, priority);
     node_t *tmp = new_node(pid, priority);
     q->count ++;    
     
@@ -188,7 +190,7 @@ int dequeue(queue_t *q, double current_time, resource_t *res){
     
     node_t *target = q->front;
     
-    DEBUG_PRINT(GREEN"Dequeue Job(%d %d)\n"RESET,target->pid, target->priority);
+    DEBUG_PRINT(BLUE"Dequeue Job(%d %d)\n"RESET,target->pid, target->priority);
     q->front = target->next;
 
     int target_pid = target->pid;
@@ -238,9 +240,9 @@ void do_register(task_list_t *task_list, reg_msg *msg){
     task -> pid = msg -> pid;
     task -> priority = msg -> priority;
 
-    DEBUG_PRINT("======== REGISTRATION ========\n");
-    DEBUG_PRINT("[PID]      %3d\n", task-> pid);
-    DEBUG_PRINT("[Priority] %3d\n", task->priority);
+    DEBUG_PRINT(BLUE"======== REGISTRATION ========\n"RESET);
+    DEBUG_PRINT(BLUE"[PID]      %3d\n"RESET, task-> pid);
+    DEBUG_PRINT(BLUE"[Priority] %3d\n"RESET, task->priority);
     
     char req_fd_name[30];
     char dec_fd_name[30];
@@ -274,12 +276,12 @@ void request_handler(task_list_t *task_list, task_info_t *task, resource_t *res,
     commErrchk(read(task -> request_fd, &ack, sizeof(int)*1));
 
     if( res -> state == BUSY && res -> pid == task->pid){ /* Job termniation */
-        DEBUG_PRINT(RED"Term Job(%d)\n"RESET,task->priority);
+        DEBUG_PRINT(GREEN"Term Job(%d)\n"RESET,task->priority);
         res -> state = IDLE;
         res -> pid = -1;
     }
     else{ /* Job release */
-        DEBUG_PRINT(RED"Release Job(%d)\n"RESET,task->priority);
+        DEBUG_PRINT(GREEN"Release Job(%d)\n"RESET,task->priority);
         enqueue(res->waiting,task->pid, task->priority);
     }
 
@@ -290,7 +292,16 @@ void decision_handler(int target_pid, task_list_t *task_list){
     int ack = 0;
     task_info_t *target = find_task_by_pid(task_list, target_pid);
 
-    DEBUG_PRINT(RED"Scheduled Job(%d)\n"RESET,target->priority);    
+    //
+    sch_msg * msg = (sch_msg *)malloc(sizeof(sch_msg));
+    msg->pid = target_pid;
+    
+    DEBUG_PRINT(GREEN"Check Swap(%d)\n"RESET,target->priority);
+    commErrchk(write(sch2mmp_fd, msg, sizeof(int)*1));
+    commErrchk(read(mmp2sch_fd, &ack, sizeof(int)));
+    DEBUG_PRINT(GREEN"Swap Done(%d)\n"RESET,target->priority);
+
+    DEBUG_PRINT(GREEN"Scheduled Job(%d)\n"RESET,target->priority);    
     commErrchk(write(target->decision_fd,&ack,sizeof(int)));
 }
 
