@@ -7,8 +7,13 @@
 
 using namespace std;
 
+#define REG_MSG_SIZE 2
+#define REQ_MSG_SIZE 3
+#define EVI_MSG_SIZE 2
+#define SCH_MSG_SIZE 1
+
 typedef enum{
-    _cudaMalloc_, _cudaFree_
+    _cudaMalloc_, _cudaFree_, _Done_
 }cudaAPI;
 
 typedef struct _PROC_INFO{
@@ -40,3 +45,7 @@ typedef struct _MSG_PACKET_EVICT{
     int start_idx;
     int end_idx;
 }evict_msg;
+
+typedef struct _MSG_PACKET_SCH{
+    int pid;
+}sch_msg;

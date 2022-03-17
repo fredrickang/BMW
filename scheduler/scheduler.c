@@ -17,6 +17,8 @@
 #include "scheduler_fn.h"
 
 #define REGISTRATION strdup("/tmp/scheduler")
+#define MMP2REG strdup("/tmp/mmp2reg")
+#define REG2MMP strdup("/tmp/reg2mmp")
 
 void del_arg(int argc, char **argv, int index)
 {

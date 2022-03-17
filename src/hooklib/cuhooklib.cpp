@@ -10,102 +10,9 @@
 #include <list>
 #include <pthread.h>
 
-#define REGISTRATION "/tmp/registration"
-#define string(x) #x
-
-#define BLUE "\x1b[34m" 
-#define GREEN "\x1b[32m" 
-#define RED "\x1b[31m"
-#define RESET "\x1b[0m" 
-
-
-#define commErrchk(ans) {commAssert((ans), __FILE__, __LINE__);}
-inline void commAssert(int code, const char *file, int line, bool abort=true){
-    if(code < 0){
-        fprintf(stderr, RED"[customHook][%s:%3d]: [%d] CommError: %d\n"RESET,file,line, getpid(),code);
-        if (abort) exit(code);
-    }
-}
-
-#define DEBUG
-
-#ifdef DEBUG
-#define DEBUG_PRINT(fmt, args...) fprintf(stderr, "[customHook][%s:%3d:%20s()]: [%d] " fmt, \
-__FILE__, __LINE__, __func__, getpid(), ##args)
-#else
-#define DEBUG_PRINT(fmt, args...)
-#endif
+#include "hooklib.hpp"
 
 using namespace std;
-
-typedef struct _ENTRY{
-    const void* address;
-    size_t size;
-}entry;
-
-typedef struct _SWAP{
-    const void* gpu_address;
-    const void* cpu_address;
-    size_t size;
-}gswap;
-
-static int init = 0;
-
-static bool SWAP_OUT = false;
-
-static int entry_index = 0;
-static  map<int,entry> gpu_entry_list;
-static map<int,gswap> swap_entry_list;
-
-int request_fd = -1;
-int decision_fd = -1;
-int register_fd = -1;
-
-pthread_t swap_thread_id;
-
-typedef enum{
-    _cudaMalloc_, _cudaFree_
-}cudaAPI;
-
-typedef struct _MSG_PACKET_EVICT{
-    int start_idx;
-    int end_idx;
-}evict_msg;
-
-typedef struct _MSG_PACKET_REGIST{
-    int reg_type;
-    int pid;
-}reg_msg;
-
-typedef struct _MSG_PACKET_REQUEST{
-    cudaAPI type;
-    int entry_index;
-    int size;
-}req_msg;
-
-
-void Init();
-int SendRequest(const void* devPtr, cudaAPI type, size_t size);
-char * getcudaAPIString(cudaAPI type);
-void close_channels();
-void close_channel(char * pipe_name);
-void Cleanup();
-
-void add_entry(map<int,entry>* entry_list, int index, const void* devPtr, size_t size);
-void del_entry(map<int,entry>* entry_list, const void* devPtr);
-
-void add_swap_entry(map<int,gswap>* entry_list, int index, const void* gpuPtr, const void* cpuPtr, size_t size);
-void del_swap_entry(map<int,gswap>* entry_list, const void* devPtr);
-
-int find_index_by_ptr(map<int,entry>* entry_list, const void* devPtr);
-
-void swapout(int signum);
-void swapin(int signum);
-void DEBUG_PRINT_ENTRY();
-
-/* CUDA memory hook */
-static cudaError_t (*lcudaMalloc)(void **, size_t) = (cudaError_t (*) (void**, size_t))dlsym(RTLD_NEXT,"cudaMalloc");
-static cudaError_t (*lcudaFree) (void*) = (cudaError_t (*) (void *))dlsym(RTLD_NEXT,"cudaFree");
 
 cudaError_t cudaMalloc (void **devPtr, size_t size){   
     cudaError_t err;
@@ -142,6 +49,11 @@ void* swapThread(void *vargsp){
     sigaddset(&sigsetmask, SIGUSR2);
     sigaddset(&sigsetmask, SIGTERM);
 
+    req_msg * msg = (req_msg *)malloc(sizeof(req_msg));
+    msg->type = _Done_;
+    msg->entry_index = -1;
+    msg->size = 0;
+
     while(1){
         if(sigwait(&sigsetmask, &signum) > 0){
             DEBUG_PRINT(RED"SIGWAIT Error\n"RESET);
@@ -150,14 +62,14 @@ void* swapThread(void *vargsp){
         switch(signum){
             case SIGUSR1:
                 swapout(signum);
-                commErrchk(write(request_fd, &ack, sizeof(int)));
+                commErrchk(write(request_fd, &msg, sizeof(int)*REQ_MSG_SIZE));
                 SWAP_OUT = true; // swapped flag on
                 break;
             case SIGUSR2:
                 if(SWAP_OUT){
                     swapin(signum);
                 } 
-                commErrchk(write(request_fd, &ack, sizeof(int)));
+                commErrchk(write(request_fd, &msg, sizeof(int)*REQ_MSG_SIZE));
                 SWAP_OUT = false;   // swapped flag off
                 break;
             case SIGTERM:
@@ -299,7 +211,7 @@ void swapin(int signum){
         char * hosPtr = (char *)iter->second.cpu_address;
         size_t size = iter->second.size;
 
-        lcudaMalloc(&devPtr,size);
+        cudaMalloc(&devPtr,size);
         cudaMemcpy(devPtr, hosPtr, size, cudaMemcpyHostToDevice);
         free(hosPtr);
         swap_entry_list.erase(iter++);
@@ -336,7 +248,7 @@ void swapout(int signum){
         char * cpu =(char *)malloc(size);
         err = cudaMemcpy(cpu, ptr, size, cudaMemcpyDeviceToHost); // error check logic need to add
         add_swap_entry(&swap_entry_list, index, (const void *)ptr, (const void *)cpu, size);
-        lcudaFree((void *)ptr);
+        cudaFree((void *)ptr);
         DEBUG_PRINT("\x1b[31m""Swap out Address: %p\n""\x1b[0m", ptr);
     }
     
@@ -344,12 +256,6 @@ void swapout(int signum){
     for(auto iter = swap_list.begin(); iter != swap_list.end(); iter++){
         gpu_entry_list.erase(*iter);
     }
-
-
-    // swap out victim assumed always not currently scheduled. 
-    // restore process state to sleep 
-    // sigset_t myset;
-    // sigsuspend(&myset);
 }
 
 void add_swap_entry(map<int,gswap>* entry_list, int index, const void* gpuPtr, const void* cpuPtr, size_t size){

@@ -14,14 +14,11 @@
 #include "mmp.hpp"
 #include "mmp_fn.hpp"
 
-#define BLUE "\x1b[34m" 
-#define GREEN "\x1b[32m" 
-#define RED "\x1b[31m"
-#define RESET "\x1b[0m" 
-
-
 #define string(x) #x
 #define MEM_LIMIT 40000
+
+extern int mmp2sch_fd;
+extern int sch2mmp_fd;
 
 static int mem_current = 0;
 
@@ -56,10 +53,11 @@ double what_time_is_it_now()
     return (double)time.tv_sec + (double)time.tv_usec * .000001;
 }
 
-int make_fdset(fd_set *readfds,int reg_fd, _proc_list *proc_list){
+int make_fdset(fd_set *readfds,int reg_fd, _proc_list *proc_list, int swapin_fd){
     // initialize fd_set;
     FD_ZERO(readfds);
 
+    FD_SET(swapin_fd, readfds);
     // set register_fd
     FD_SET(reg_fd, readfds);
         
@@ -165,11 +163,16 @@ void registration(_proc_list* proc_list, reg_msg *msg){
     DEBUG_PRINT_PROCS(proc_list);
 }
 
-void request_handler(_proc_list * proc_list, _proc * proc){
+cudaAPI request_handler(_proc_list * proc_list, _proc * proc){
     req_msg *msg = (req_msg *)malloc(sizeof(req_msg));
     read(proc->request_fd, msg, sizeof(int)*3);
 
     DEBUG_PRINT(GREEN"[REQEUST %d/%d] Index: %d API: %s Size: %d\n"RESET, proc->id, proc->pid, msg->entry_index ,getcudaAPIString(msg->type), msg->size);
+    
+    if(msg->type == _Done_){
+        DEBUG_PRINT(BLUE"Swap-in/out Done\n"RESET);
+        return _Done_;
+    }
 
     if(msg->type == _cudaMalloc_){
         /* Memory overflow handling */
@@ -179,7 +182,7 @@ void request_handler(_proc_list * proc_list, _proc * proc){
                 DEBUG_PRINT(RED"[Error] Victim not exist\n"RESET);
                 exit(-1);
             }
-            evictprotocal(victim, msg->size);
+            swapout(victim, msg->size);
         }
         /* Update entry */
         proc->m_entry->insert(make_pair(msg->entry_index,msg->size));
@@ -197,6 +200,7 @@ void request_handler(_proc_list * proc_list, _proc * proc){
     /* memory handling done! go do what ever you requested */
     int ack = 1;
     write(proc->decision_fd, &ack, sizeof(int));
+    return msg->type;
 }
 
 //  victim selection policy
@@ -218,7 +222,7 @@ _proc* choose_victim(_proc_list* proc_list, _proc* proc){
 
 // Page eviction protocal 
 // Current policy: Greedy from oldest
-void evictprotocal(_proc* proc, size_t size){
+void swapout(_proc_list* proc_list, _proc* proc, size_t size){
     size_t evict_size = 0;
     list<int> evict_entry_list;
 
@@ -253,17 +257,27 @@ void evictprotocal(_proc* proc, size_t size){
     
     kill(proc->pid, SIGUSR1);
 
-    // m_entry update & mem_current update
-    for(auto iter = evict_entry_list.begin(); iter !=evict_entry_list.end(); iter++){
-        mem_current -= proc->m_entry->at(*iter);
-        proc->m_entry->erase(*iter);
-    }
+    cudaAPI ret;
+    do{
+        ret = request_handler(proc_list, proc);
+    }while(ret != _Done_);
+}
 
-    /* Synchronous version */
-    if(read(proc->request_fd, &ack , sizeof(int)) < 0){
-        DEBUG_PRINT(RED"eviction protocal read failed\n"RESET);
-        exit(-1);
-    }
+void swapin(_proc_list * proc_list){
+    sch_msg *msg = (sch_msg *)malloc(sizeof(sch_msg));
+    commErrchk(read(sch2mmp_fd, msg, sizeof(int)*SCH_MSG_SIZE));
+    
+    int target_pid = msg->pid;
+
+    _proc * proc = find_proc_by_pid(proc_list, target_pid);
+    kill(target_pid, SIGUSR2);
+    cudaAPI ret;
+    do{
+        ret = request_handler(proc_list, proc);
+    }while(ret != _Done_);
+    
+    int ack;
+    commErrchk(write(mmp2sch_fd, &ack, sizeof(int)));
 }
 
 int open_channel(char *pipe_name,int mode){
