@@ -25,7 +25,7 @@ void del_arg(int argc, char **argv, int index);
 int find_int_arg(int argc, char **argv, char *arg, int def);
 double what_time_is_it_now();
 
-int make_fdset(fd_set *readfds,int reg_fd, _proc_list *proc_list);
+int make_fdset(fd_set *readfds,int reg_fd, _proc_list *proc_list, int sch2mmp);
 _proc_list *create_proc_list();
 void check_registration(_proc_list *proc_list, int reg_fd);
 void registration(_proc_list* proc_list, reg_msg *msg);

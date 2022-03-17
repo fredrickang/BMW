@@ -29,14 +29,14 @@ int main(int argc, char **argv){
     int reg_fd = open_channel(REGISTRATION, O_RDONLY | O_NONBLOCK);
     
     // MMP 2 Scheduler 
-    mmp2sch_fd = open_channel(MMP2SCH, O_WRONLY);
+    //mmp2sch_fd = open_channel(MMP2SCH, O_WRONLY);
     sch2mmp_fd = open_channel(SCH2MMP, O_RDONLY | O_NONBLOCK);
 
     int fd_head;
     fd_set readfds;
 
     do{
-        fd_head = make_fdset(&readfds, reg_fd, proc_list);
+        fd_head = make_fdset(&readfds, reg_fd, proc_list, sch2mmp_fd);
         
         if(select(fd_head + 1, &readfds, NULL, NULL, NULL)){
             if(FD_ISSET(reg_fd, &readfds)){

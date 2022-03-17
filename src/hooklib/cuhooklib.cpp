@@ -62,14 +62,14 @@ void* swapThread(void *vargsp){
         switch(signum){
             case SIGUSR1:
                 swapout(signum);
-                commErrchk(write(request_fd, &msg, sizeof(int)*REQ_MSG_SIZE));
+                commErrchk(write(request_fd, msg, sizeof(int)*REQ_MSG_SIZE));
                 SWAP_OUT = true; // swapped flag on
                 break;
             case SIGUSR2:
                 if(SWAP_OUT){
                     swapin(signum);
                 } 
-                commErrchk(write(request_fd, &msg, sizeof(int)*REQ_MSG_SIZE));
+                commErrchk(write(request_fd, msg, sizeof(int)*REQ_MSG_SIZE));
                 SWAP_OUT = false;   // swapped flag off
                 break;
             case SIGTERM:
@@ -225,36 +225,33 @@ void swapout(int signum){
 
     int ack;
     cudaError_t err;
-    list<int> swap_list;
     
     evict_msg *msg = (evict_msg *)malloc(sizeof(evict_msg));
     commErrchk(read(decision_fd, msg, sizeof(int)*2));
-
-
-    int start_idx = msg->start_idx;
-    auto begin_iter = gpu_entry_list.find(msg->start_idx);
-    auto end_iter = gpu_entry_list.find(msg->end_idx);
-    end_iter++;
     
     DEBUG_PRINT("\x1b[31m""Swap out request [%d, %d]\n""\x1b[0m",msg->start_idx, msg->end_idx);
 
-    for(auto iter = begin_iter; iter!=end_iter; iter++){
+    for(auto iter = gpu_entry_list.cbegin(); iter != gpu_entry_list.cend(); ){
         int index = iter->first;
-        swap_list.push_back(index);            
-        const void* ptr = iter->second.address;
-        size_t size = iter->second.size;
-        
-        /* Synchronous version */
-        char * cpu =(char *)malloc(size);
-        err = cudaMemcpy(cpu, ptr, size, cudaMemcpyDeviceToHost); // error check logic need to add
-        add_swap_entry(&swap_entry_list, index, (const void *)ptr, (const void *)cpu, size);
-        cudaFree((void *)ptr);
-        DEBUG_PRINT("\x1b[31m""Swap out Address: %p\n""\x1b[0m", ptr);
-    }
-    
-    // erasing entry inside above for loop cuase an error
-    for(auto iter = swap_list.begin(); iter != swap_list.end(); iter++){
-        gpu_entry_list.erase(*iter);
+        DEBUG_PRINT(BLUE"Index :%d\n"RESET, index);
+        if(index >= msg->start_idx && index <= msg->end_idx){
+            const void* ptr = iter->second.address;
+            size_t size = iter->second.size;
+            
+            char * cpu =(char *)malloc(size);
+            err = cudaMemcpy(cpu, ptr, size, cudaMemcpyDeviceToHost); // error check logic need to add
+            add_swap_entry(&swap_entry_list, index, (const void *)ptr, (const void *)cpu, size);
+            
+            // MAP Erase sucks... it must be done in this way 
+            DEBUG_PRINT("cudaFree\n");
+            SendRequest((const void *)ptr, _cudaFree_, 0);
+            gpu_entry_list.erase(iter++);
+            lcudaFree((void *)ptr);
+
+            DEBUG_PRINT("\x1b[31m""Swap out Address: %p\n""\x1b[0m", ptr);
+        }else{
+            ++iter;
+        }
     }
 }
 
@@ -266,7 +263,6 @@ void add_swap_entry(map<int,gswap>* entry_list, int index, const void* gpuPtr, c
     tmp.size = size;
     (*entry_list).insert({index, tmp});
 }
-
 
 char * getcudaAPIString(cudaAPI type){
     switch (type){

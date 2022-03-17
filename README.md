@@ -22,4 +22,6 @@ Concerns
 
 
 TODO<br>
+cudaMalloc check duplicates. => if do cudamalloc again in same pointer, what happen?
+
 

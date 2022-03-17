@@ -165,9 +165,9 @@ void registration(_proc_list* proc_list, reg_msg *msg){
 
 cudaAPI request_handler(_proc_list * proc_list, _proc * proc){
     req_msg *msg = (req_msg *)malloc(sizeof(req_msg));
-    read(proc->request_fd, msg, sizeof(int)*3);
+    read(proc->request_fd, msg, sizeof(int)*REQ_MSG_SIZE);
 
-    DEBUG_PRINT(GREEN"[REQEUST %d/%d] Index: %d API: %s Size: %d\n"RESET, proc->id, proc->pid, msg->entry_index ,getcudaAPIString(msg->type), msg->size);
+    DEBUG_PRINT(GREEN"[REQEUST %d/%d] Index: %3d API: %15s Size: %5d\n"RESET, proc->id, proc->pid, msg->entry_index ,getcudaAPIString(msg->type), msg->size);
     
     if(msg->type == _Done_){
         DEBUG_PRINT(BLUE"Swap-in/out Done\n"RESET);
@@ -182,7 +182,7 @@ cudaAPI request_handler(_proc_list * proc_list, _proc * proc){
                 DEBUG_PRINT(RED"[Error] Victim not exist\n"RESET);
                 exit(-1);
             }
-            swapout(victim, msg->size);
+            swapout(proc_list, victim, msg->size);
         }
         /* Update entry */
         proc->m_entry->insert(make_pair(msg->entry_index,msg->size));
@@ -305,6 +305,8 @@ char * getcudaAPIString(cudaAPI type){
             return string(_cudaMalloc_);
         case _cudaFree_:
             return string(_cudaFree_);
+        case _Done_:
+            return string(_Done_);
     }
 }
 
