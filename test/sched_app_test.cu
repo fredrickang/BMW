@@ -21,7 +21,7 @@
 int request_fd = -1;
 int decision_fd = -1;
 int register_fd = -1;
-struct timespec release_time;
+struct timespec release_time = {0,0};
 
 typedef struct _MSG_PACKET{
     int regist;
@@ -29,7 +29,7 @@ typedef struct _MSG_PACKET{
     int priority;
 }msg;
 
-
+int Sync = 1;
 
 int communicate(int ack){
     int decision = 0; 
@@ -38,10 +38,18 @@ int communicate(int ack){
         perror("Request Send :");
         exit(-1);
     }
-    if( read(decision_fd, &decision, sizeof(int)*1) == -1){
+    if(Sync){
+        if(read(decision_fd, &release_time, sizeof(struct timespec))< 0){
+            perror("release time");
+        }
+        Sync = 0;
+    }
+
+    if(read(decision_fd, &decision, sizeof(int)*1) == -1){
         perror("Decision Recv :");
         exit(-1);
     }
+    printf("decision: %d\n",decision);
     return decision;
 }
 
@@ -79,9 +87,16 @@ int find_int_arg(int argc, char **argv, char *arg, int def)
     return def;
 }
 
-int main(int argc, char **argv){
+void cleanup(void){
+    msg * dummy = (msg *)malloc(sizeof(msg));
+    dummy->regist = 0;
+    dummy->pid = getpid();
+    write(register_fd, dummy, sizeof(int)*3);
+}
 
-    int period = find_int_arg(argc, argv, "-period", 100);
+int main(int argc, char **argv){
+    atexit(cleanup);
+    int period = find_int_arg(argc, argv, "-period", 500);
     int priority = find_int_arg(argc, argv, "-prio", 1);
 
     double period_ns = period*1000000;
@@ -124,7 +139,6 @@ int main(int argc, char **argv){
 
     int *a[MAX_ITER];
     int *d_a[MAX_ITER];
-    struct timespec release_time;
     for(int i = 0; i < MAX_ITER; i++){
         a[i] = (int *)malloc(sizeof(int)*1000);
         for(int j = 0; j < 1000; j++) a[i][j] = i;
@@ -134,8 +148,7 @@ int main(int argc, char **argv){
 
     int *b[MAX_ITER];
     int ret;
-
-    clock_gettime(CLOCK_MONOTONIC,&release_time);
+    int ack;
     for(int i = 0; i < MAX_JOB; i++){
         communicate(0);
 
@@ -146,7 +159,14 @@ int main(int argc, char **argv){
             ret = cudaMemcpy(b[j],d_a[j], sizeof(int)*1000, cudaMemcpyDeviceToHost);
             printf("Index %d, ret:%d, values: %d %d %d\n",j, ret, b[j][0], b[j][1], b[j][2]);
         }
-
+        
+        if( write(request_fd, &ack, sizeof(int)*1) == -1){
+            perror("Request Send :");
+            exit(-1);
+        }
+        
+        struct timespec current;
+        clock_gettime(CLOCK_MONOTONIC, &current);
         timespec_add(&release_time, &period_st);
         clock_nanosleep(CLOCK_MONOTONIC,TIMER_ABSTIME,&release_time, NULL);
     } 
