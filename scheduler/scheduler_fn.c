@@ -244,11 +244,11 @@ void do_register(task_list_t *task_list, reg_msg *msg){
     DEBUG_PRINT(BLUE"[PID]      %3d\n"RESET, task-> pid);
     DEBUG_PRINT(BLUE"[Priority] %3d\n"RESET, task->priority);
     
-    char req_fd_name[30];
-    char dec_fd_name[30];
+    char req_fd_name[50];
+    char dec_fd_name[50];
 
-    snprintf(req_fd_name, 30,"/tmp/request_%d",task->pid);
-    snprintf(dec_fd_name, 30,"/tmp/decision_%d",task->pid);
+    snprintf(req_fd_name, 50,"/tmp/sch_request_%d",task->pid);
+    snprintf(dec_fd_name, 50,"/tmp/sch_decision_%d",task->pid);
 
     task -> request_fd = open_channel(req_fd_name, O_RDONLY);
     task -> decision_fd = open_channel(dec_fd_name, O_WRONLY);

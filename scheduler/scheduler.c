@@ -66,8 +66,8 @@ int main(int argc, char **argv){
         
     int reg_fd = open_channel(REGISTRATION, O_RDONLY | O_NONBLOCK);
 
-    mmp2sch_fd = open_channel(MMP2SCH, O_RDONLY);
-    sch2mmp_fd = open_channel(SCH2MMP, O_WRONLY);
+    mmp2sch_fd = open(MMP2SCH, O_RDONLY);
+    sch2mmp_fd = open(SCH2MMP, O_WRONLY);
     
     double current_time;
     int target_pid;

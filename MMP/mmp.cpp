@@ -29,8 +29,8 @@ int main(int argc, char **argv){
     int reg_fd = open_channel(REGISTRATION, O_RDONLY | O_NONBLOCK);
     
     // MMP 2 Scheduler 
-    mmp2sch_fd = open_channel(MMP2SCH, O_WRONLY);
     sch2mmp_fd = open_channel(SCH2MMP, O_RDONLY | O_NONBLOCK);
+    mmp2sch_fd = open_channel(MMP2SCH, O_WRONLY);
 
     int fd_head;
     fd_set readfds;

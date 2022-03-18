@@ -1,0 +1,200 @@
+[scheduler][scheduler_fn.c:324:        open_channel()]: [34mChannel for /tmp/scheduler has been successfully openned!
+[0m[scheduler][scheduler_fn.c:243:         do_register()]: [34m======== REGISTRATION ========
+[0m[scheduler][scheduler_fn.c:244:         do_register()]: [34m[PID]      3248
+[0m[scheduler][scheduler_fn.c:245:         do_register()]: [34m[Priority]   2
+[0m[scheduler][scheduler_fn.c:324:        open_channel()]: [34mChannel for /tmp/sch_request_3248 has been successfully openned!
+[0m[scheduler][scheduler_fn.c:324:        open_channel()]: [34mChannel for /tmp/sch_decision_3248 has been successfully openned!
+[0m[scheduler][scheduler_fn.c: 96:       register_task()]: [34mTask(3248) Registration
+[0m[scheduler][scheduler_fn.c: 59:          print_list()]: [34mTaskList : {[3248] 2} 
+[0m[scheduler][scheduler_fn.c:243:         do_register()]: [34m======== REGISTRATION ========
+[0m[scheduler][scheduler_fn.c:244:         do_register()]: [34m[PID]      3247
+[0m[scheduler][scheduler_fn.c:245:         do_register()]: [34m[Priority]   1
+[0m[scheduler][scheduler_fn.c:324:        open_channel()]: [34mChannel for /tmp/sch_request_3247 has been successfully openned!
+[0m[scheduler][scheduler_fn.c:324:        open_channel()]: [34mChannel for /tmp/sch_decision_3247 has been successfully openned!
+[0m[scheduler][scheduler_fn.c: 96:       register_task()]: [34mTask(3247) Registration
+[0m[scheduler][scheduler_fn.c: 59:          print_list()]: [34mTaskList : {[3247] 1} {[3248] 2} 
+[0m[scheduler][scheduler_fn.c:284:     request_handler()]: [32mRelease Job(1)
+[0m[scheduler][scheduler_fn.c:160:             enqueue()]: [34mEnqueue Job(3247 1)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : {[3247 1]} 
+[0m[scheduler][scheduler_fn.c:284:     request_handler()]: [32mRelease Job(2)
+[0m[scheduler][scheduler_fn.c:160:             enqueue()]: [34mEnqueue Job(3248 2)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : {[3247 1]} {[3248 2]} 
+[0m[scheduler][scheduler_fn.c:193:             dequeue()]: [34mDequeue Job(3247 1)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : {[3248 2]} 
+[0m[scheduler][scheduler_fn.c:299:    decision_handler()]: [32mCheck Swap(1)
+[0m[scheduler][scheduler_fn.c:302:    decision_handler()]: [32mSwap Done(1)
+[0m[scheduler][scheduler_fn.c:304:    decision_handler()]: [32mScheduled Job(1)
+[0m[scheduler][scheduler_fn.c:279:     request_handler()]: [32mTerm Job(1)
+[0m[scheduler][scheduler_fn.c:193:             dequeue()]: [34mDequeue Job(3248 2)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : Empty Queue
+[0m[scheduler][scheduler_fn.c:299:    decision_handler()]: [32mCheck Swap(2)
+[0m[scheduler][scheduler_fn.c:302:    decision_handler()]: [32mSwap Done(2)
+[0m[scheduler][scheduler_fn.c:304:    decision_handler()]: [32mScheduled Job(2)
+[0m[scheduler][scheduler_fn.c:279:     request_handler()]: [32mTerm Job(2)
+[0m[scheduler][scheduler_fn.c:284:     request_handler()]: [32mRelease Job(1)
+[0m[scheduler][scheduler_fn.c:160:             enqueue()]: [34mEnqueue Job(3247 1)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : {[3247 1]} 
+[0m[scheduler][scheduler_fn.c:284:     request_handler()]: [32mRelease Job(2)
+[0m[scheduler][scheduler_fn.c:160:             enqueue()]: [34mEnqueue Job(3248 2)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : {[3247 1]} {[3248 2]} 
+[0m[scheduler][scheduler_fn.c:193:             dequeue()]: [34mDequeue Job(3247 1)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : {[3248 2]} 
+[0m[scheduler][scheduler_fn.c:299:    decision_handler()]: [32mCheck Swap(1)
+[0m[scheduler][scheduler_fn.c:302:    decision_handler()]: [32mSwap Done(1)
+[0m[scheduler][scheduler_fn.c:304:    decision_handler()]: [32mScheduled Job(1)
+[0m[scheduler][scheduler_fn.c:279:     request_handler()]: [32mTerm Job(1)
+[0m[scheduler][scheduler_fn.c:193:             dequeue()]: [34mDequeue Job(3248 2)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : Empty Queue
+[0m[scheduler][scheduler_fn.c:299:    decision_handler()]: [32mCheck Swap(2)
+[0m[scheduler][scheduler_fn.c:302:    decision_handler()]: [32mSwap Done(2)
+[0m[scheduler][scheduler_fn.c:304:    decision_handler()]: [32mScheduled Job(2)
+[0m[scheduler][scheduler_fn.c:279:     request_handler()]: [32mTerm Job(2)
+[0m[scheduler][scheduler_fn.c:284:     request_handler()]: [32mRelease Job(1)
+[0m[scheduler][scheduler_fn.c:160:             enqueue()]: [34mEnqueue Job(3247 1)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : {[3247 1]} 
+[0m[scheduler][scheduler_fn.c:284:     request_handler()]: [32mRelease Job(2)
+[0m[scheduler][scheduler_fn.c:160:             enqueue()]: [34mEnqueue Job(3248 2)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : {[3247 1]} {[3248 2]} 
+[0m[scheduler][scheduler_fn.c:193:             dequeue()]: [34mDequeue Job(3247 1)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : {[3248 2]} 
+[0m[scheduler][scheduler_fn.c:299:    decision_handler()]: [32mCheck Swap(1)
+[0m[scheduler][scheduler_fn.c:302:    decision_handler()]: [32mSwap Done(1)
+[0m[scheduler][scheduler_fn.c:304:    decision_handler()]: [32mScheduled Job(1)
+[0m[scheduler][scheduler_fn.c:279:     request_handler()]: [32mTerm Job(1)
+[0m[scheduler][scheduler_fn.c:193:             dequeue()]: [34mDequeue Job(3248 2)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : Empty Queue
+[0m[scheduler][scheduler_fn.c:299:    decision_handler()]: [32mCheck Swap(2)
+[0m[scheduler][scheduler_fn.c:302:    decision_handler()]: [32mSwap Done(2)
+[0m[scheduler][scheduler_fn.c:304:    decision_handler()]: [32mScheduled Job(2)
+[0m[scheduler][scheduler_fn.c:279:     request_handler()]: [32mTerm Job(2)
+[0m[scheduler][scheduler_fn.c:284:     request_handler()]: [32mRelease Job(1)
+[0m[scheduler][scheduler_fn.c:160:             enqueue()]: [34mEnqueue Job(3247 1)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : {[3247 1]} 
+[0m[scheduler][scheduler_fn.c:284:     request_handler()]: [32mRelease Job(2)
+[0m[scheduler][scheduler_fn.c:160:             enqueue()]: [34mEnqueue Job(3248 2)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : {[3247 1]} {[3248 2]} 
+[0m[scheduler][scheduler_fn.c:193:             dequeue()]: [34mDequeue Job(3247 1)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : {[3248 2]} 
+[0m[scheduler][scheduler_fn.c:299:    decision_handler()]: [32mCheck Swap(1)
+[0m[scheduler][scheduler_fn.c:302:    decision_handler()]: [32mSwap Done(1)
+[0m[scheduler][scheduler_fn.c:304:    decision_handler()]: [32mScheduled Job(1)
+[0m[scheduler][scheduler_fn.c:279:     request_handler()]: [32mTerm Job(1)
+[0m[scheduler][scheduler_fn.c:193:             dequeue()]: [34mDequeue Job(3248 2)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : Empty Queue
+[0m[scheduler][scheduler_fn.c:299:    decision_handler()]: [32mCheck Swap(2)
+[0m[scheduler][scheduler_fn.c:302:    decision_handler()]: [32mSwap Done(2)
+[0m[scheduler][scheduler_fn.c:304:    decision_handler()]: [32mScheduled Job(2)
+[0m[scheduler][scheduler_fn.c:279:     request_handler()]: [32mTerm Job(2)
+[0m[scheduler][scheduler_fn.c:284:     request_handler()]: [32mRelease Job(1)
+[0m[scheduler][scheduler_fn.c:160:             enqueue()]: [34mEnqueue Job(3247 1)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : {[3247 1]} 
+[0m[scheduler][scheduler_fn.c:284:     request_handler()]: [32mRelease Job(2)
+[0m[scheduler][scheduler_fn.c:160:             enqueue()]: [34mEnqueue Job(3248 2)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : {[3247 1]} {[3248 2]} 
+[0m[scheduler][scheduler_fn.c:193:             dequeue()]: [34mDequeue Job(3247 1)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : {[3248 2]} 
+[0m[scheduler][scheduler_fn.c:299:    decision_handler()]: [32mCheck Swap(1)
+[0m[scheduler][scheduler_fn.c:302:    decision_handler()]: [32mSwap Done(1)
+[0m[scheduler][scheduler_fn.c:304:    decision_handler()]: [32mScheduled Job(1)
+[0m[scheduler][scheduler_fn.c:279:     request_handler()]: [32mTerm Job(1)
+[0m[scheduler][scheduler_fn.c:193:             dequeue()]: [34mDequeue Job(3248 2)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : Empty Queue
+[0m[scheduler][scheduler_fn.c:299:    decision_handler()]: [32mCheck Swap(2)
+[0m[scheduler][scheduler_fn.c:302:    decision_handler()]: [32mSwap Done(2)
+[0m[scheduler][scheduler_fn.c:304:    decision_handler()]: [32mScheduled Job(2)
+[0m[scheduler][scheduler_fn.c:279:     request_handler()]: [32mTerm Job(2)
+[0m[scheduler][scheduler_fn.c:284:     request_handler()]: [32mRelease Job(1)
+[0m[scheduler][scheduler_fn.c:160:             enqueue()]: [34mEnqueue Job(3247 1)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : {[3247 1]} 
+[0m[scheduler][scheduler_fn.c:284:     request_handler()]: [32mRelease Job(2)
+[0m[scheduler][scheduler_fn.c:160:             enqueue()]: [34mEnqueue Job(3248 2)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : {[3247 1]} {[3248 2]} 
+[0m[scheduler][scheduler_fn.c:193:             dequeue()]: [34mDequeue Job(3247 1)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : {[3248 2]} 
+[0m[scheduler][scheduler_fn.c:299:    decision_handler()]: [32mCheck Swap(1)
+[0m[scheduler][scheduler_fn.c:302:    decision_handler()]: [32mSwap Done(1)
+[0m[scheduler][scheduler_fn.c:304:    decision_handler()]: [32mScheduled Job(1)
+[0m[scheduler][scheduler_fn.c:279:     request_handler()]: [32mTerm Job(1)
+[0m[scheduler][scheduler_fn.c:193:             dequeue()]: [34mDequeue Job(3248 2)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : Empty Queue
+[0m[scheduler][scheduler_fn.c:299:    decision_handler()]: [32mCheck Swap(2)
+[0m[scheduler][scheduler_fn.c:302:    decision_handler()]: [32mSwap Done(2)
+[0m[scheduler][scheduler_fn.c:304:    decision_handler()]: [32mScheduled Job(2)
+[0m[scheduler][scheduler_fn.c:279:     request_handler()]: [32mTerm Job(2)
+[0m[scheduler][scheduler_fn.c:284:     request_handler()]: [32mRelease Job(2)
+[0m[scheduler][scheduler_fn.c:160:             enqueue()]: [34mEnqueue Job(3248 2)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : {[3248 2]} 
+[0m[scheduler][scheduler_fn.c:193:             dequeue()]: [34mDequeue Job(3248 2)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : Empty Queue
+[0m[scheduler][scheduler_fn.c:299:    decision_handler()]: [32mCheck Swap(2)
+[0m[scheduler][scheduler_fn.c:302:    decision_handler()]: [32mSwap Done(2)
+[0m[scheduler][scheduler_fn.c:304:    decision_handler()]: [32mScheduled Job(2)
+[0m[scheduler][scheduler_fn.c:284:     request_handler()]: [32mRelease Job(1)
+[0m[scheduler][scheduler_fn.c:160:             enqueue()]: [34mEnqueue Job(3247 1)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : {[3247 1]} 
+[0m[scheduler][scheduler_fn.c:279:     request_handler()]: [32mTerm Job(2)
+[0m[scheduler][scheduler_fn.c:193:             dequeue()]: [34mDequeue Job(3247 1)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : Empty Queue
+[0m[scheduler][scheduler_fn.c:299:    decision_handler()]: [32mCheck Swap(1)
+[0m[scheduler][scheduler_fn.c:302:    decision_handler()]: [32mSwap Done(1)
+[0m[scheduler][scheduler_fn.c:304:    decision_handler()]: [32mScheduled Job(1)
+[0m[scheduler][scheduler_fn.c:279:     request_handler()]: [32mTerm Job(1)
+[0m[scheduler][scheduler_fn.c:284:     request_handler()]: [32mRelease Job(1)
+[0m[scheduler][scheduler_fn.c:160:             enqueue()]: [34mEnqueue Job(3247 1)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : {[3247 1]} 
+[0m[scheduler][scheduler_fn.c:193:             dequeue()]: [34mDequeue Job(3247 1)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : Empty Queue
+[0m[scheduler][scheduler_fn.c:299:    decision_handler()]: [32mCheck Swap(1)
+[0m[scheduler][scheduler_fn.c:302:    decision_handler()]: [32mSwap Done(1)
+[0m[scheduler][scheduler_fn.c:304:    decision_handler()]: [32mScheduled Job(1)
+[0m[scheduler][scheduler_fn.c:284:     request_handler()]: [32mRelease Job(2)
+[0m[scheduler][scheduler_fn.c:160:             enqueue()]: [34mEnqueue Job(3248 2)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : {[3248 2]} 
+[0m[scheduler][scheduler_fn.c:279:     request_handler()]: [32mTerm Job(1)
+[0m[scheduler][scheduler_fn.c:193:             dequeue()]: [34mDequeue Job(3248 2)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : Empty Queue
+[0m[scheduler][scheduler_fn.c:299:    decision_handler()]: [32mCheck Swap(2)
+[0m[scheduler][scheduler_fn.c:302:    decision_handler()]: [32mSwap Done(2)
+[0m[scheduler][scheduler_fn.c:304:    decision_handler()]: [32mScheduled Job(2)
+[0m[scheduler][scheduler_fn.c:279:     request_handler()]: [32mTerm Job(2)
+[0m[scheduler][scheduler_fn.c:284:     request_handler()]: [32mRelease Job(1)
+[0m[scheduler][scheduler_fn.c:160:             enqueue()]: [34mEnqueue Job(3247 1)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : {[3247 1]} 
+[0m[scheduler][scheduler_fn.c:284:     request_handler()]: [32mRelease Job(2)
+[0m[scheduler][scheduler_fn.c:160:             enqueue()]: [34mEnqueue Job(3248 2)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : {[3247 1]} {[3248 2]} 
+[0m[scheduler][scheduler_fn.c:193:             dequeue()]: [34mDequeue Job(3247 1)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : {[3248 2]} 
+[0m[scheduler][scheduler_fn.c:299:    decision_handler()]: [32mCheck Swap(1)
+[0m[scheduler][scheduler_fn.c:302:    decision_handler()]: [32mSwap Done(1)
+[0m[scheduler][scheduler_fn.c:304:    decision_handler()]: [32mScheduled Job(1)
+[0m[scheduler][scheduler_fn.c:279:     request_handler()]: [32mTerm Job(1)
+[0m[scheduler][scheduler_fn.c:193:             dequeue()]: [34mDequeue Job(3248 2)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : Empty Queue
+[0m[scheduler][scheduler_fn.c:299:    decision_handler()]: [32mCheck Swap(2)
+[0m[scheduler][scheduler_fn.c:302:    decision_handler()]: [32mSwap Done(2)
+[0m[scheduler][scheduler_fn.c:304:    decision_handler()]: [32mScheduled Job(2)
+[0m[scheduler][scheduler_fn.c:279:     request_handler()]: [32mTerm Job(2)
+[0m[scheduler][scheduler_fn.c:284:     request_handler()]: [32mRelease Job(2)
+[0m[scheduler][scheduler_fn.c:160:             enqueue()]: [34mEnqueue Job(3248 2)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : {[3248 2]} 
+[0m[scheduler][scheduler_fn.c:193:             dequeue()]: [34mDequeue Job(3248 2)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : Empty Queue
+[0m[scheduler][scheduler_fn.c:299:    decision_handler()]: [32mCheck Swap(2)
+[0m[scheduler][scheduler_fn.c:302:    decision_handler()]: [32mSwap Done(2)
+[0m[scheduler][scheduler_fn.c:304:    decision_handler()]: [32mScheduled Job(2)
+[0m[scheduler][scheduler_fn.c:284:     request_handler()]: [32mRelease Job(1)
+[0m[scheduler][scheduler_fn.c:160:             enqueue()]: [34mEnqueue Job(3247 1)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : {[3247 1]} 
+[0m[scheduler][scheduler_fn.c:279:     request_handler()]: [32mTerm Job(2)
+[0m[scheduler][scheduler_fn.c:193:             dequeue()]: [34mDequeue Job(3247 1)
+[0m[scheduler][scheduler_fn.c: 70:         print_queue()]: [34mWQ : Empty Queue
+[0m[scheduler][scheduler_fn.c:299:    decision_handler()]: [32mCheck Swap(1)
+[0m[scheduler][scheduler_fn.c:302:    decision_handler()]: [32mSwap Done(1)
+[0m[scheduler][scheduler_fn.c:304:    decision_handler()]: [32mScheduled Job(1)
+[0m[scheduler][scheduler_fn.c:279:     request_handler()]: [32mTerm Job(1)
+[0m[scheduler][scheduler_fn.c:111:    de_register_task()]: [34mTask(3247) De-registration
+[0m[scheduler][scheduler_fn.c: 59:          print_list()]: [34mTaskList : {[3248] 2} 
+[0m[scheduler][scheduler_fn.c:111:    de_register_task()]: [34mTask(3248) De-registration
+[0m[scheduler][scheduler_fn.c: 59:          print_list()]: [34mTaskList : Nothing registered
+[0m

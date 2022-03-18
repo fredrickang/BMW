@@ -30,6 +30,21 @@ cudaError_t cudaMalloc (void **devPtr, size_t size){
     return err;
 }
 
+cudaError_t cudaMalloc (void **devPtr, size_t size, int index){   
+    cudaError_t err;
+    if(!init){
+        Init();
+        init = 1;
+    }
+
+    DEBUG_PRINT(BLUE"cudaMalloc [%d]\n"RESET, size);
+
+    SendRequest((const void *)*devPtr, _cudaMalloc_, size);
+    err = lcudaMalloc(devPtr, size);
+    add_entry(&gpu_entry_list, index, (const void *)*devPtr, size);
+    return err;
+}
+
 cudaError_t cudaFree(void* devPtr){ /* free */
     
     DEBUG_PRINT(BLUE"cudaFree\n"RESET);
@@ -142,7 +157,7 @@ int SendRequest(const void* devPtr, cudaAPI type, size_t size){
 
 #ifdef DEBUG
 void DEBUG_PRINT_ENTRY(){
-    DEBUG_PRINT(BLUE"Current Entry: ");
+    DEBUG_PRINT(BLUE"Current GPU Entry: ");
     auto iter = gpu_entry_list.begin();
     while(iter != gpu_entry_list.end()){
         fprintf(stderr, "{%d, [%p, %d]} ",iter->first, iter->second.address, iter->second.size);
@@ -155,6 +170,16 @@ void DEBUG_PRINT_ENTRY(){
 
 }
 #endif
+
+void PRINT_SWAP_ENTRY(){
+    DEBUG_PRINT(BLUE"Current SWAP Entry: ");
+    auto iter = swap_entry_list.begin();
+    while(iter != swap_entry_list.end()){
+        fprintf(stderr, "{%d, [%p, %p, %d]} ",iter->first, iter->second.gpu_address, iter->second.cpu_address , iter->second.size);
+        ++iter;
+    }
+    fprintf(stderr,"\n"RESET);
+}
 
 void add_entry(map<int,entry> *entry_list, int index, const void* devPtr, size_t size){
     DEBUG_PRINT(BLUE"Add: {%d, [%p, %d]}\n"RESET, index, devPtr, size);
@@ -191,7 +216,7 @@ int find_index_by_ptr(map<int,entry> *entry_list, const void* ptr){
 void Cleanup(){
     DEBUG_PRINT(BLUE"Cleaning up...\n"RESET);
 
-    // kill(0, SIGTERM);
+    kill(0, SIGTERM);
     pthread_join(swap_thread_id, NULL);
     DEBUG_PRINT(BLUE"Swap Thread terminated\n"RESET);
 
@@ -208,18 +233,20 @@ void Cleanup(){
 void swapin(int signum){
     DEBUG_PRINT(GREEN"Swap-in (SIGUSR2) handler callback\n"RESET);
     // iterate swap entry list
-    for(auto iter = swap_entry_list.cbegin(); iter != swap_entry_list.cend(); ){
+    for(auto iter = swap_entry_list.begin(); iter != swap_entry_list.end(); iter++){
         int index = iter->first;
         void * devPtr = (void *)iter->second.gpu_address;
         char * hosPtr = (char *)iter->second.cpu_address;
         size_t size = iter->second.size;
 
-        cudaMalloc(&devPtr,size);
+        cudaMalloc(&devPtr,size, index);
         cudaMemcpy(devPtr, hosPtr, size, cudaMemcpyHostToDevice);
         free(hosPtr);
-        swap_entry_list.erase(iter++);
+        //swap_entry_list.erase(iter++);
         DEBUG_PRINT(GREEN"Swap in Addr: %p, Size: %d\n"RESET, devPtr, size);
+        PRINT_SWAP_ENTRY();
     }
+    swap_entry_list.clear();
 }
 
 
@@ -252,6 +279,7 @@ void swapout(int signum){
             lcudaFree((void *)devPtr);
 
             DEBUG_PRINT(GREEN"Swap out Addr: %p, Size: %d\n"RESET, devPtr, size);
+            PRINT_SWAP_ENTRY();
         }else{
             ++iter;
         }
