@@ -4,28 +4,17 @@
 
 
 int main(void){
-    int ret;
-    int *a, *d_a, *d_b, *b;
-    a = (int *)malloc(sizeof(int)*10);
-    b = (int *)malloc(sizeof(int)*10);
-
-    cudaMalloc(&d_a, sizeof(int)*10);
-    
-    for(int i = 0; i < 10; i++) a[i] = i;
-
-    cudaMemcpy(d_a, a, sizeof(int)*10, cudaMemcpyHostToDevice);
-    d_b = d_a;
-
-    cudaFree(d_a);
-    cudaMalloc(&d_b, sizeof(int)*10);
-    cudaMemcpy(d_b, a, sizeof(int)*10, cudaMemcpyHostToDevice);
-
-    ret = cudaMemcpy(b, d_a, sizeof(int)*10, cudaMemcpyDeviceToHost);
-    printf("cudamemcpy ret: %d\n", ret);
-    for(int i =0; i < 10; i++){
-        printf("%d,",b[i]);
+    void *d_a[10];
+    for(int i = 0; i < 10; i++){
+        cudaMalloc(&d_a[i], sizeof(char)*1000);
+        printf("%d th address: %p\n",i, d_a[i]);
     }
-    printf("\n");
+    printf("%d\n",(int *)d_a[1] -(int *)d_a[0]);
+
+    cudaFree(d_a[1]);
+    int *c;
+    cudaMalloc(&c, sizeof(int)*1024);
+    printf("target address: %p\n", c);
 
     return 0;
 }
