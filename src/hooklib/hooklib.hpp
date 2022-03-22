@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <dlfcn.h>
-#include <cuda_runtime.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <map>
@@ -19,10 +18,19 @@
 #define commErrchk(ans) {commAssert((ans), __FILE__, __LINE__);}
 inline void commAssert(int code, const char *file, int line, bool abort=true){
     if(code < 0){
-        fprintf(stderr, RED"[customHook][%s:%3d]: [%d] CommError: %d\n"RESET,file,line, getpid(),code);
+        fprintf(stderr, RED "[customHook][%s:%3d]: [%d] CommError: %d\n" RESET,file,line, getpid(),code);
         if (abort) exit(code);
     }
 }
+
+#define CHECK_CUDA(ans) {check_cuda((ans), __FILE__, __LINE__);}
+inline void check_cuda(int code, const char *file, int line, bool abort=true){
+    if(code != 0){
+        fprintf(stderr, RED "[customHook][%s:%3d]: [%d] CUDAERROR: %d\n" RESET,file,line, getpid(),code);
+        if (abort) exit(code);
+    }
+}
+
 
 #ifdef DEBUG
 #define DEBUG_PRINT(fmt, args...) fprintf(stderr, "[customHook][%s:%3d:%20s()]: [%d] " fmt, \
@@ -39,7 +47,10 @@ __FILE__, __LINE__, __func__, getpid(), ##args)
 #define EVI_MSG_SIZE 2
 #define SCH_MSG_SIZE 1
 
+#define GPU_PAGE_SIZE 512
+
 using namespace std;
+
 
 typedef struct _ENTRY{
     const void* address;
@@ -90,6 +101,7 @@ typedef struct _MSG_PACKET_REQUEST{
 
 void Init();
 int SendRequest(const void* devPtr, cudaAPI type, size_t size);
+int SendRequest(const void* devPtr, cudaAPI type, size_t size, int index);
 char * getcudaAPIString(cudaAPI type);
 void close_channels();
 void close_channel(char * pipe_name);

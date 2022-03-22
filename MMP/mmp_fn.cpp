@@ -273,6 +273,7 @@ void swapin(_proc_list * proc_list){
         ret = request_handler(proc_list, proc);
     }while(ret != _Done_);
     
+    // send to scheduler 
     int ack;
     commErrchk(write(mmp2sch_fd, &ack, sizeof(int)));
 }
