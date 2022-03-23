@@ -53,13 +53,13 @@ using namespace std;
 
 
 typedef struct _ENTRY{
-    const void* address;
+    void** address;
     size_t size;
 }entry;
 
 typedef struct _SWAP{
-    const void* gpu_address;
-    const void* cpu_address;
+    void** gpu_address;
+     void* cpu_address;
     size_t size;
 }gswap;
 
@@ -100,20 +100,20 @@ typedef struct _MSG_PACKET_REQUEST{
 
 
 void Init();
-int SendRequest(const void* devPtr, cudaAPI type, size_t size);
-int SendRequest(const void* devPtr, cudaAPI type, size_t size, int index);
+int SendRequest( void* devPtr, cudaAPI type, size_t size);
+int SendRequest( void* devPtr, cudaAPI type, size_t size, int index);
 char * getcudaAPIString(cudaAPI type);
 void close_channels();
 void close_channel(char * pipe_name);
 void Cleanup();
 
-void add_entry(map<int,entry>* entry_list, int index, const void* devPtr, size_t size);
-void del_entry(map<int,entry>* entry_list, const void* devPtr);
+void add_entry(map<int,entry>* entry_list, int index,  void** devPtr, size_t size);
+void del_entry(map<int,entry>* entry_list,  void* devPtr);
 
-void add_swap_entry(map<int,gswap>* entry_list, int index, const void* gpuPtr, const void* cpuPtr, size_t size);
-void del_swap_entry(map<int,gswap>* entry_list, const void* devPtr);
+void add_swap_entry(map<int,gswap>* entry_list, int index,  void** gpuPtr,  void* cpuPtr, size_t size);
+void del_swap_entry(map<int,gswap>* entry_list,  void* devPtr);
 
-int find_index_by_ptr(map<int,entry>* entry_list, const void* devPtr);
+int find_index_by_ptr(map<int,entry>* entry_list,  void* devPtr);
 
 void swapout(int signum);
 void swapin(int signum);
