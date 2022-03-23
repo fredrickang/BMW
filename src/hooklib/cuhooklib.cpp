@@ -172,7 +172,7 @@ int SendRequest(void* devPtr, cudaAPI type, size_t size, int index){
     commErrchk(read(decision_fd, &ack, sizeof(int)));
 }
 
-#ifdef DEBUG
+#ifdef DEBUG2
 void DEBUG_PRINT_ENTRY(){
     DEBUG_PRINT(BLUE "Current GPU Entry: ");
     auto iter = gpu_entry_list.begin();
@@ -188,7 +188,7 @@ void DEBUG_PRINT_ENTRY(){
 }
 #endif
 
-#ifdef DEBUG
+#ifdef DEBUG2
 void DEBUG_SWAP_PRINT(){
     DEBUG_PRINT(BLUE "Current SWAP Entry: ");
     auto iter = swap_entry_list.begin();
@@ -235,18 +235,18 @@ int find_index_by_ptr(map<int,entry> *entry_list, void* ptr){
 
 void Cleanup(){
     DEBUG_PRINT(BLUE "Cleaning up...\n" RESET);
-
-    kill(0, SIGTERM);
-    pthread_join(swap_thread_id, NULL);
-    DEBUG_PRINT(BLUE "Swap Thread terminated\n" RESET);
-
+    
     reg_msg *reg = (reg_msg *)malloc(sizeof(reg_msg));
     reg->reg_type = 0;
     reg->pid = getpid();
     commErrchk(write(register_fd, reg, sizeof(int)*2));
     DEBUG_PRINT(BLUE "==De-registration done==\n" RESET);
-    DEBUG_PRINT(GREEN "==Termination Sequence Done==\n" RESET);
+    
+    kill(0, SIGTERM);
+    pthread_join(swap_thread_id, NULL);
+    DEBUG_PRINT(BLUE "Swap Thread terminated\n" RESET);
 
+    DEBUG_PRINT(GREEN "==Termination Sequence Done==\n" RESET);
 }
 
 /* Swap in handler */

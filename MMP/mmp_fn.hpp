@@ -15,7 +15,7 @@ inline void commAssert(int code, const char *file, int line, bool abort=true){
 }
 #endif
 #ifdef DEBUG
-#define DEBUG_PRINT(fmt, args...) fprintf(stderr, "[MMP][%s:%3d:%20s()]: " fmt, \
+#define DEBUG_PRINT(fmt, args...) fprintf(stderr, "[MMP][%s:%4d:%20s()]: " fmt, \
 __FILE__, __LINE__, __func__, ##args);
 #else
 #define DEBUG_PRINT(fmt, args...)
@@ -40,3 +40,4 @@ void close_channels(int pid);
 _proc* choose_victim(_proc_list* proc_list, _proc* proc);
 void swapout(_proc_list* proc_list, _proc* proc, size_t size);
 void swapin(_proc_list* proc_list);
+unsigned long long int getmemorysize(map<int,size_t> entry);

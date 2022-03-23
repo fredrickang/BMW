@@ -2,6 +2,8 @@
 *.a
 *.so
 *.log
+*.weight
+darknet/
 app
 victim
 

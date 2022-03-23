@@ -9,17 +9,20 @@
 #include <time.h>
 #include <float.h>
 #include <math.h>
-
+#include <iostream>
+#include <chrono>
 #include "mmp.hpp"
 #include "mmp_fn.hpp"
 
 #define string(x) #x
-#define MEM_LIMIT 40000
+#define MEM_LIMIT 32212254720
 
 extern int mmp2sch_fd;
 extern int sch2mmp_fd;
 
-static int mem_current = 0;
+static unsigned long long mem_current = 0;
+
+using namespace std;
 
 void del_arg(int argc, char **argv, int index)
 {
@@ -91,9 +94,15 @@ void check_registration(_proc_list *proc_list, int reg_fd){
 void de_registration(_proc_list* proc_list, reg_msg *msg){
 
     _proc * target = find_proc_by_pid(proc_list, msg -> pid);
-
+    size_t used_memory_size = getmemorysize(*(target->m_entry));
+    
     close_channels(msg->pid);
     de_register_proc(proc_list, target);
+    
+    mem_current -= used_memory_size;
+    
+    DEBUG_PRINT(GREEN"Freed memory useage : %f\n"RESET, (float) used_memory_size/giga::num);
+    DEBUG_PRINT(GREEN"Current memory useage : %f\n"RESET, (float) mem_current/giga::num );
 }
 
 void de_register_proc(_proc_list* proc_list, _proc * target){
@@ -277,6 +286,16 @@ void swapin(_proc_list * proc_list){
     int ack;
     commErrchk(write(mmp2sch_fd, &ack, sizeof(int)));
 }
+
+unsigned long long int getmemorysize(map<int,size_t> entry){
+    unsigned long long int total_size = 0;
+    for(auto iter = entry.begin(); iter != entry.end(); iter++){
+        total_size += iter->second;
+    }
+    return total_size;
+}
+
+
 
 int open_channel(char *pipe_name,int mode){
     int pipe_fd;
