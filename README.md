@@ -1,4 +1,4 @@
-# BMW // This is w/o scheduler branch
+# BMW 
 Beyond the Memory Wall of GPU
 
 ## 0311
