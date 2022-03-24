@@ -11,6 +11,7 @@
 #include <math.h>
 #include <iostream>
 #include <chrono>
+#include <errno.h>
 #include "mmp.hpp"
 #include "mmp_fn.hpp"
 
@@ -329,8 +330,9 @@ char * getcudaAPIString(cudaAPI type){
 
 
 void close_channel(int pid, char * pipe_name){
+    errno = 0;
     if ( unlink(pipe_name) == -1){
-        DEBUG_PRINT(RED"[%d] Fail to close channel %s\n"RESET, pid, pipe_name);
+        DEBUG_PRINT(RED"[%d] Fail to close channel [Errno: %d] %s\n"RESET, pid, errno, pipe_name);
         exit(-1);
     }
     DEBUG_PRINT(BLUE"[%d] Channel %s closed\n"RESET, pid, pipe_name);

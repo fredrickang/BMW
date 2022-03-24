@@ -33,8 +33,8 @@ inline void check_cuda(int code, const char *file, int line, bool abort=true){
 
 
 #ifdef DEBUG
-#define DEBUG_PRINT(fmt, args...) fprintf(stderr, "[customHook][%s:%3d:%20s()]: [%d] " fmt, \
-__FILE__, __LINE__, __func__, getpid(), ##args)
+#define DEBUG_PRINT(fmt, args...) do{ fprintf(stderr, "[customHook][%s:%3d:%20s()]: [%d] " fmt, \
+__FILE__, __LINE__, __func__, getpid(), ##args); fflush(stderr); }while(0)
 #else
 #define DEBUG_PRINT(fmt, args...)
 #endif
