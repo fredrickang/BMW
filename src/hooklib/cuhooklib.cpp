@@ -13,6 +13,9 @@
 #include <math.h>
 #include <algorithm>
 
+#include <execinfo.h>
+
+
 #include "hooklib.hpp"
 
 void * GPU_OFFSET_PTR = NULL;
@@ -25,7 +28,6 @@ cudaError_t cudaMalloc(void **devPtr, size_t size){
         Init();
         init = 1;
     }
-
     DEBUG_PRINT(BLUE "cudaMalloc [%d]\n" RESET, size);
 
     SendRequest(*devPtr, _cudaMalloc_, size);

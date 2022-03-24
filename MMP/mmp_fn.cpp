@@ -16,8 +16,9 @@
 #include "mmp_fn.hpp"
 
 #define string(x) #x
-#define MEM_LIMIT 32212254720
-
+#define MEM_LIMIT 10737418240    //10GB
+//#define MEM_LIMIT 32212254720  //32GB
+ 
 extern int mmp2sch_fd;
 extern int sch2mmp_fd;
 
