@@ -337,8 +337,8 @@ void close_channels(task_info_t * task){
     char request_name[30];
     char decision_name[30];
     
-    snprintf(request_name, 30, "/tmp/request_%d", task->pid);
-    snprintf(decision_name, 30, "/tmp/decision_%d", task->pid);
+    snprintf(request_name, 30, "/tmp/sch_request_%d", task->pid);
+    snprintf(decision_name, 30, "/tmp/sch_decision_%d", task->pid);
     
     close_channel(request_name);
     close_channel(decision_name);
