@@ -3,7 +3,7 @@
 *.so
 app
 victim
-
+darknet/
 # OS Generated #
 .vscode
 .DS_Store*

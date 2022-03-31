@@ -11,29 +11,31 @@ using namespace std;
 
 int main(void){
     
-    int *offset;
-    cudaMalloc(&offset, sizeof(char));
-
-    void *d_a[10];
-    void *a;
-    a = (void *)malloc(sizeof(int)*1000);
-
-    for(int i = 0; i < 5; i++){
+    int *d_a[10];
+    int *a[10];
+   
+    for(int i = 0; i < 10; i++){
+        a[i] = (int *)malloc(sizeof(int)*1000);
+        for(int j = 0; j < 1000; j++) a[i][j] = i;
         cudaMalloc(&d_a[i], sizeof(int)*1000);
+        cudaMemcpy(d_a[i], a, sizeof(int)*1000, cudaMemcpyHostToDevice);
         printf("%d th address: %p\n",i, d_a[i]);
     }
 
-    cudaFree(d_a[0]);
-    cudaFree(d_a[2]);
-    cudaFree(d_a[4]);
-    cudaFree(d_a[1]);
+    // for(int i = 0; i <10; i++){
+    //     if(i % 2 == 0) cudaFree(d_a[i]);
+    // }
+
+    // cudaFree(d_a[0]);
+    // cudaFree(d_a[2]);
+    // cudaFree(d_a[4]);
+    
     for(int i = 0; i < 5; i++){
-    void *c;
-    cudaMalloc(&c, sizeof(int));
-    printf("target address: %p\n", c);
+        void *c;
+        cudaMalloc(&c, sizeof(int));
+        printf("target address: %p\n", c);
+        cudaFree(c);
     }
-    printf("dummy %p\n",d_a[0]);
-    printf("dummy %p\n",d_a[2]);
-    printf("dummy %p\n",d_a[4]);
+    
     return 0;
 }

@@ -82,12 +82,7 @@ void* swapThread(void *vargsp){
             exit(-1);
         }
         switch(signum){
-            // for(int i =0; i<3; i++){
-            // void *c;
-            // lcudaMalloc((void**)&c, sizeof(char));
-            // DEBUG_PRINT(RED"New allocation Address: %p\n"RESET, c);
-            // lcudaFree(c);
-            // }
+
             case SIGUSR1:
                 swapout(signum);
                 commErrchk(write(request_fd, msg, sizeof(int)*REQ_MSG_SIZE));
@@ -291,7 +286,13 @@ bool cmp(const pair<int, gswap> &a, const pair<int, gswap>& b){
 
 /* Swap in handler */
 void swapin(int signum){
-
+    
+    for(int i =0; i<3; i++){
+        void *c;
+        lcudaMalloc(&c, sizeof(int));
+        DEBUG_PRINT(RED"New allocation Address: %p\n"RESET, c);
+        //lcudaFree(c);
+    }
 
     if(GPU_OFFSET_PTR == NULL){
         DEBUG_PRINT(RED "GPU offeset pointer not set\n" RESET);
