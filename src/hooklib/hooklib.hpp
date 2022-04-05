@@ -9,19 +9,20 @@
 #include <map>
 #include <list>
 #include <pthread.h>
-
 #include <sys/syscall.h>
-#define gettid() syscall(SYS_gettid)
 
+#define string(x) #x
 
 #define BLUE "\x1b[34m"  //info 
 #define GREEN "\x1b[32m" //highlight
 #define RED "\x1b[31m" // error
 #define RESET "\x1b[0m" 
 
+#define gettid() syscall(SYS_gettid)
+
 #define DEBUG
-#define commErrchk(ans) {commAssert((ans), __FILE__, __LINE__);}
-inline void commAssert(int code, const char *file, int line, bool abort=true){
+#define CHECK_COMM(ans) {check_comm((ans), __FILE__, __LINE__);}
+inline void check_comm(int code, const char *file, int line, bool abort=true){
     if(code < 0){
         fprintf(stderr, RED "[customHook][%s:%3d]: [%d] CommError: %d\n" RESET,file,line, gettid(),code);
         if (abort) exit(code);
@@ -36,7 +37,6 @@ inline void check_cuda(int code, const char *file, int line, bool abort=true){
     }
 }
 
-
 #ifdef DEBUG
 #define DEBUG_PRINT(fmt, args...) fprintf(stderr, "[customHook][%s:%3d:%20s()]: [%d] " fmt, \
 __FILE__, __LINE__, __func__, gettid(), ##args)
@@ -45,17 +45,20 @@ __FILE__, __LINE__, __func__, gettid(), ##args)
 #endif
 
 #define REGISTRATION "/tmp/mmp"
-#define string(x) #x
-
 #define REG_MSG_SIZE 2
 #define REQ_MSG_SIZE 3
 #define EVI_MSG_SIZE 2
 #define SCH_MSG_SIZE 1
 
-#define GPU_PAGE_SIZE 512
-
 using namespace std;
 
+static int init = 0;
+static int entry_index = 0;
+static int fake_address = -1;
+static bool SWAP_OUT = false;
+
+static map<void*, void*> pagetable;
+pthread_t swap_thread_id;
 
 typedef struct _ENTRY{
     void* address;
@@ -68,19 +71,12 @@ typedef struct _SWAP{
     size_t size;
 }gswap;
 
-static int init = 0;
-
-static bool SWAP_OUT = false;
-
-static int entry_index = 0;
 static  map<int,entry> gpu_entry_list;
 static map<int,gswap> swap_entry_list;
-static map<void*, void*> pagetable;
+
 int request_fd = -1;
 int decision_fd = -1;
 int register_fd = -1;
-
-pthread_t swap_thread_id;
 
 typedef enum{
     _cudaMalloc_, _cudaFree_, _Done_
@@ -122,6 +118,8 @@ int find_index_by_ptr(map<int,entry>* entry_list,  void* devPtr);
 
 void swapout(int signum);
 void swapin(int signum);
+void DEBUG_PRINT_SWAP();
+void DEBUG_PRINT_PAGETABLE();
 void DEBUG_PRINT_ENTRY();
 
 /* CUDA memory hook */

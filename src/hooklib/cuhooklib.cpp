@@ -17,13 +17,15 @@
 #include <list>
 #include <map>
 #include <algorithm>
-#include<cassert>
+#include <cassert>
 
 #include "hooklib.hpp"
 
-void * GPU_OFFSET_PTR = NULL;
-
 using namespace std;
+
+void fake_kernel_launch(){
+
+}
 
 cudaError_t cudaMalloc(void **devPtr, size_t size){   
     cudaError_t err;
@@ -38,6 +40,17 @@ cudaError_t cudaMalloc(void **devPtr, size_t size){
     err = lcudaMalloc(devPtr, size);
     add_entry(&gpu_entry_list, entry_index, *devPtr, size);
     entry_index++;
+    
+    if(pagetable.size() != 0){ /* app-level page table exist */
+        void *new_address = *devPtr;
+        void *old_address = (void *)fake_address;
+        fake_address--;
+        pagetable[old_address] = new_address;
+        *devPtr = old_address;
+        DEBUG_PRINT(RED"Orig Address: %p\n"RESET, new_address);
+        DEBUG_PRINT(RED"Fake Address: %p\n"RESET, old_address);
+        DEBUG_PRINT_PAGETABLE();
+    }
     return err;
 }
 
@@ -58,6 +71,16 @@ cudaError_t cudaMalloc(void **devPtr, size_t size, int index){
 
 cudaError_t cudaFree(void* devPtr){ /* free */
     
+    if(pagetable.size() != 0){
+        
+        void *new_address = pagetable[devPtr];
+        pagetable.erase(devPtr);
+        
+        devPtr = new_address;
+        DEBUG_PRINT(RED"cudaFree: %p\n"RESET,devPtr);
+        DEBUG_PRINT_PAGETABLE();
+    }
+
     DEBUG_PRINT(BLUE "cudaFree\n" RESET);
     SendRequest(devPtr, _cudaFree_, 0);
     del_entry(&gpu_entry_list, devPtr);
@@ -87,7 +110,61 @@ cudaError_t cudaMemcpy(void* dst, const void* src, size_t size, cudaMemcpyKind k
     return err;
 }
 
+/* Swap-in handler */
+void swapin(int signum){
+    DEBUG_PRINT(GREEN "Swap-in (SIGUSR2) handler callback\n" RESET);
+    for(auto iter = swap_entry_list.begin(); iter != swap_entry_list.end(); iter++){
+        int index = iter->first;
+        size_t size = iter->second.size;
+        void* new_address;
+        void* old_address = iter->second.gpu_address;
+        char* hostPtr = (char *)iter->second.cpu_address;
 
+        cudaMalloc(&new_address, size, index);
+        lcudaMemcpy(new_address, hostPtr, size, cudaMemcpyHostToDevice);
+        free(hostPtr);
+        /* page table update */
+        DEBUG_PRINT(GREEN "Swap in Addr: %p, Size: %d\n" RESET, new_address, size);
+        pagetable[old_address] = new_address;
+    } 
+    swap_entry_list.clear();
+    DEBUG_PRINT_SWAP();
+    DEBUG_PRINT_ENTRY();
+    DEBUG_PRINT_PAGETABLE();
+}
+
+/* Swap out handler */
+void swapout(int signum){
+    DEBUG_PRINT(GREEN "Swap-out (SIGUSR1) handler callback\n" RESET);
+
+    int ack;
+    cudaError_t err;
+    
+    evict_msg *msg = (evict_msg *)malloc(sizeof(evict_msg));
+    CHECK_COMM(read(decision_fd, msg, sizeof(int)*2));
+    
+    DEBUG_PRINT(GREEN "Swap-out Range [%d, %d]\n" RESET,msg->start_idx, msg->end_idx);
+    
+    for(int i = msg->start_idx; i <=msg->end_idx; i++){
+        int index = i;
+        size_t size = gpu_entry_list[index].size;
+        void * devPtr = gpu_entry_list[index].address;
+        void * hostPtr = (char *)malloc(size);
+
+        CHECK_CUDA(lcudaMemcpy(hostPtr, devPtr, size, cudaMemcpyDeviceToHost));
+        add_swap_entry(&swap_entry_list, index, devPtr, hostPtr, size);
+
+        CHECK_CUDA(cudaFree(devPtr));
+            
+        if(pagetable.size() != 0){
+            pagetable.erase(devPtr);
+        }
+        DEBUG_PRINT(GREEN "Swap out Addr: %p, Size: %d\n" RESET, devPtr, size);
+    }
+    DEBUG_PRINT_ENTRY();
+    DEBUG_PRINT_SWAP();
+    DEBUG_PRINT_PAGETABLE();
+}
 
 void* swapThread(void *vargsp){
 
@@ -112,13 +189,13 @@ void* swapThread(void *vargsp){
         switch(signum){
             case SIGUSR1:
                 swapout(signum);
-                commErrchk(write(request_fd, msg, sizeof(int)*REQ_MSG_SIZE));
+                CHECK_COMM(write(request_fd, msg, sizeof(int)*REQ_MSG_SIZE));
                 DEBUG_PRINT(GREEN "Swap-out Complete\n" RESET);
                 SWAP_OUT = true; // swapped flag on
                 break;
             case SIGUSR2:
                 if(SWAP_OUT) swapin(signum);
-                commErrchk(write(request_fd, msg, sizeof(int)*REQ_MSG_SIZE));
+                CHECK_COMM(write(request_fd, msg, sizeof(int)*REQ_MSG_SIZE));
                 DEBUG_PRINT(GREEN "Swap-in Complete\n" RESET);
                 SWAP_OUT = false;   // swapped flag off
                 break;
@@ -133,7 +210,7 @@ void* swapThread(void *vargsp){
 }
 
 void Init(){
-    // Block other signals except SIGINT
+
     sigset_t sigsetmask_main;
     sigfillset(&sigsetmask_main);
     sigdelset(&sigsetmask_main, SIGINT);
@@ -148,7 +225,7 @@ void Init(){
     reg->reg_type = 1;
     reg->pid = getpid();
 
-    commErrchk(write(register_fd, reg, sizeof(int)*2))
+    CHECK_COMM(write(register_fd, reg, sizeof(int)*2))
     
     DEBUG_PRINT(BLUE "Registrated\n" RESET);
 
@@ -183,8 +260,8 @@ int SendRequest(void* devPtr, cudaAPI type, size_t size){
     if(type == _cudaMalloc_)  msg -> entry_index = entry_index;
     if(type == _cudaFree_)  msg -> entry_index = find_index_by_ptr(&gpu_entry_list, devPtr);
     
-    commErrchk(write(request_fd, msg, sizeof(int)*3));
-    commErrchk(read(decision_fd, &ack, sizeof(int)));
+    CHECK_COMM(write(request_fd, msg, sizeof(int)*3));
+    CHECK_COMM(read(decision_fd, &ack, sizeof(int)));
 }
 int SendRequest(void* devPtr, cudaAPI type, size_t size, int index){
     DEBUG_PRINT_ENTRY();
@@ -198,8 +275,8 @@ int SendRequest(void* devPtr, cudaAPI type, size_t size, int index){
     if(type == _cudaMalloc_)  msg -> entry_index = index;
     if(type == _cudaFree_)  msg -> entry_index = find_index_by_ptr(&gpu_entry_list, devPtr);
     
-    commErrchk(write(request_fd, msg, sizeof(int)*3));
-    commErrchk(read(decision_fd, &ack, sizeof(int)));
+    CHECK_COMM(write(request_fd, msg, sizeof(int)*3));
+    CHECK_COMM(read(decision_fd, &ack, sizeof(int)));
 }
 
 #ifdef DEBUG2
@@ -287,7 +364,7 @@ void Cleanup(){
     reg_msg *reg = (reg_msg *)malloc(sizeof(reg_msg));
     reg->reg_type = 0;
     reg->pid = getpid();
-    commErrchk(write(register_fd, reg, sizeof(int)*2));
+    CHECK_COMM(write(register_fd, reg, sizeof(int)*2));
     DEBUG_PRINT(BLUE "==De-registration done==\n" RESET);
     
     kill(0, SIGTERM);
@@ -297,80 +374,7 @@ void Cleanup(){
     DEBUG_PRINT(GREEN "==Termination Sequence Done==\n" RESET);
 }
 
-/* Swap in handler */
-// void swapin(int signum){
-//     DEBUG_PRINT(GREEN "Swap-in (SIGUSR2) handler callback\n" RESET);
-//     // iterate swap entry list
-//     for(auto iter = swap_entry_list.begin(); iter != swap_entry_list.end(); iter++){
-//         int index = iter->first;
-//         size_t size = iter->second.size;
 
-//         void * devPtr = iter->second.gpu_address;
-//         char * hosPtr = (char *)iter->second.cpu_address;
-        
-//         cudaMalloc(&devPtr,&devPtr,size,index);
-//         cudaMemcpy(devPtr, hosPtr, size, cudaMemcpyHostToDevice);
-//         free(hosPtr);
-//     }
-//     swap_entry_list.clear();
-//     DEBUG_PRINT_SWAP();
-//     DEBUG_PRINT_ENTRY();
-// } 
-
-void swapin(int signum){
-    DEBUG_PRINT(GREEN "Swap-in (SIGUSR2) handler callback\n" RESET);
-    for(auto iter = swap_entry_list.begin(); iter != swap_entry_list.end(); iter++){
-        int index = iter->first;
-        size_t size = iter->second.size;
-        void* new_address;
-        void* old_address = iter->second.gpu_address;
-        char* hostPtr = (char *)iter->second.cpu_address;
-
-        cudaMalloc(&new_address, size, index);
-        lcudaMemcpy(new_address, hostPtr, size, cudaMemcpyHostToDevice);
-        free(hostPtr);
-        /* page table update */
-        DEBUG_PRINT(GREEN "Swap in Addr: %p, Size: %d\n" RESET, new_address, size);
-        pagetable[old_address] = new_address;
-    } 
-    swap_entry_list.clear();
-    DEBUG_PRINT_SWAP();
-    DEBUG_PRINT_ENTRY();
-    DEBUG_PRINT_PAGETABLE();
-}
-
-/* Swap out handler */
-void swapout(int signum){
-    DEBUG_PRINT(GREEN "Swap-out (SIGUSR1) handler callback\n" RESET);
-
-    int ack;
-    cudaError_t err;
-    
-    evict_msg *msg = (evict_msg *)malloc(sizeof(evict_msg));
-    commErrchk(read(decision_fd, msg, sizeof(int)*2));
-    
-    DEBUG_PRINT(GREEN "Swap-out Range [%d, %d]\n" RESET,msg->start_idx, msg->end_idx);
-    
-    for(int i = msg->start_idx; i <=msg->end_idx; i++){
-        int index = i;
-        size_t size = gpu_entry_list[index].size;
-        void * devPtr = gpu_entry_list[index].address;
-        void * hostPtr = (char *)malloc(size);
-
-        CHECK_CUDA(lcudaMemcpy(hostPtr, devPtr, size, cudaMemcpyDeviceToHost));
-        add_swap_entry(&swap_entry_list, index, devPtr, hostPtr, size);
-
-        CHECK_CUDA(cudaFree(devPtr));
-            
-        if(pagetable.size() != 0){
-            pagetable.erase(devPtr);
-        }
-        DEBUG_PRINT(GREEN "Swap out Addr: %p, Size: %d\n" RESET, devPtr, size);
-    }
-    DEBUG_PRINT_ENTRY();
-    DEBUG_PRINT_SWAP();
-    DEBUG_PRINT_PAGETABLE();
-}
 
 void add_swap_entry(map<int,gswap>* entry_list, int index, void* gpuPtr, void* cpuPtr, size_t size){
     DEBUG_PRINT(BLUE "Add (Swap): {%d, [%p, %p, %d]}\n" RESET, index, gpuPtr, cpuPtr, size);
@@ -393,13 +397,21 @@ char * getcudaAPIString(cudaAPI type){
 
 cudaError_t cudaLaunchKernel( const void* func, dim3 gridDim, dim3 blockDim, void** args, size_t sharedMem, cudaStream_t stream){
     cudaError_t err;
-    DEBUG_PRINT(RED"args %p\n"RESET,args);
-    for(int i = 0; i < 15; i++){
-        DEBUG_PRINT(RED"%p\n"RESET,args[i]);
-        //DEBUG_PRINT(RED"%p\n"RESET,*((int *)args[i]));
+    int arg_size = *(int *)args[0];
+    DEBUG_PRINT(RED"arg_size :%d\n"RESET,arg_size);
+    void *new_args[arg_size];
+
+    for(int i = 1; i < arg_size+1; i++){
+        DEBUG_PRINT(RED"Old args: %p\n"RESET,*(void **)args[i]);
+        if(pagetable.find(*(void **)args[i])!= pagetable.end()){
+            DEBUG_PRINT(RED"New args: %p\n"RESET,pagetable[*(void **)args[i]]);
+            new_args[i-1] = (void *)&pagetable[*(void **)args[i]];
+        } 
+        else new_args[i-1] = args[i];
     }
-    DEBUG_PRINT(RED"====================\n"RESET);
-    err = lcudaLaunchKernel(func, gridDim, blockDim, args, sharedMem, stream);
+    
+    err = cudaSuccess;
+    CHECK_CUDA(lcudaLaunchKernel(func, gridDim, blockDim, new_args, sharedMem, stream));
     return err;
 }
 
