@@ -1,17 +1,23 @@
+#define _GNU_SOURCE
+
 #include <stdio.h>
-#include <iostream>
 #include <stdlib.h>
 #include <unistd.h>
+
 #include <dlfcn.h>
-#include <cuda_runtime.h>
 #include <fcntl.h>
 #include <signal.h>
-#include <map>
-#include <vector>
-#include <list>
 #include <pthread.h>
+
 #include <math.h>
+#include <cuda.h>
+#include <cuda_runtime.h>
+
+#include <iostream>
+#include <list>
+#include <map>
 #include <algorithm>
+#include<cassert>
 
 #include "hooklib.hpp"
 
@@ -30,12 +36,12 @@ cudaError_t cudaMalloc(void **devPtr, size_t size){
 
     SendRequest(*devPtr, _cudaMalloc_, size);
     err = lcudaMalloc(devPtr, size);
-    add_entry(&gpu_entry_list, entry_index, devPtr, size);
+    add_entry(&gpu_entry_list, entry_index, *devPtr, size);
     entry_index++;
     return err;
 }
 
-cudaError_t cudaMalloc(void **devPtr, void **idxPtr, size_t size, int index){   
+cudaError_t cudaMalloc(void **devPtr, size_t size, int index){   
     cudaError_t err;
     if(!init){
         Init();
@@ -46,7 +52,7 @@ cudaError_t cudaMalloc(void **devPtr, void **idxPtr, size_t size, int index){
 
     SendRequest(*devPtr, _cudaMalloc_, size, index);
     err = lcudaMalloc(devPtr, size);
-    add_entry(&gpu_entry_list, index, idxPtr, size);
+    add_entry(&gpu_entry_list, index, *devPtr, size);
     return err;
 }
 
@@ -54,10 +60,34 @@ cudaError_t cudaFree(void* devPtr){ /* free */
     
     DEBUG_PRINT(BLUE "cudaFree\n" RESET);
     SendRequest(devPtr, _cudaFree_, 0);
-    del_entry(&gpu_entry_list,devPtr);
+    del_entry(&gpu_entry_list, devPtr);
 
     return lcudaFree(devPtr);
 }
+
+cudaError_t cudaMemcpy(void* dst, const void* src, size_t size, cudaMemcpyKind kind){
+    void* remapped_dst = dst;
+    const void * remapped_src = src;
+
+    if(pagetable.size() != 0){
+        if(kind == cudaMemcpyHostToDevice){
+            if (pagetable.find(dst) != pagetable.end()) {
+                remapped_dst = pagetable[dst];
+                DEBUG_PRINT(RED "Re-direceted %p -> %p\n" RESET,dst, remapped_dst);
+            }
+        }else{
+            if (pagetable.find((void *)src) != pagetable.end() ){
+                remapped_src = (const void*)pagetable[(void *)src];
+                DEBUG_PRINT(RED "Re-direceted %p -> %p\n" RESET,src, remapped_src);
+            } 
+        }
+    }
+    cudaError_t err = cudaSuccess;
+    CHECK_CUDA(lcudaMemcpy(remapped_dst, remapped_src, size, kind));
+    return err;
+}
+
+
 
 void* swapThread(void *vargsp){
 
@@ -177,7 +207,7 @@ void DEBUG_PRINT_ENTRY(){
     DEBUG_PRINT(BLUE "Current GPU Entry: ");
     auto iter = gpu_entry_list.begin();
     while(iter != gpu_entry_list.end()){
-        fprintf(stderr, "{%d, [%p, %p, %d]} ",iter->first, iter->second.address, *(iter->second.address), iter->second.size);
+        fprintf(stderr, "{%d, [%p, %d]} ",iter->first, iter->second.address, iter->second.size);
         ++iter;
     }
     fprintf(stderr,"\n" RESET);
@@ -189,7 +219,7 @@ void DEBUG_PRINT_ENTRY(){
 #endif
 
 #ifdef DEBUG2
-void DEBUG_SWAP_PRINT(){
+void DEBUG_PRINT_SWAP(){
     DEBUG_PRINT(BLUE "Current SWAP Entry: ");
     auto iter = swap_entry_list.begin();
     while(iter != swap_entry_list.end()){
@@ -199,12 +229,30 @@ void DEBUG_SWAP_PRINT(){
     fprintf(stderr,"\n" RESET);
 }
 #else
-void DEBUG_SWAP_PRINT(){
+void DEBUG_PRINT_SWAP(){
 
 }
 #endif
 
-void add_entry(map<int,entry> *entry_list, int index, void** devPtr, size_t size){
+
+#ifdef DEBUG
+void DEBUG_PRINT_PAGETABLE(){
+    DEBUG_PRINT(GREEN "Current Page Table Entry: ");
+    auto iter = pagetable.begin();
+    while(iter != pagetable.end()){
+        fprintf(stderr,"{Old: %p, New: %p}",iter->first, iter->second);
+        ++iter;
+    }
+    fprintf(stderr,"\n" RESET);
+}
+#else
+void DEBUG_PRINT_PAGETABLE(){
+
+}
+#endif
+
+
+void add_entry(map<int,entry> *entry_list, int index, void* devPtr, size_t size){
     DEBUG_PRINT(BLUE "Add: {%d, [%p, %d]}\n" RESET, index, devPtr, size);
     entry tmp;
     tmp.address = devPtr;
@@ -221,11 +269,11 @@ void del_entry(map<int,entry> *entry_list, void* devPtr){
 int find_index_by_ptr(map<int,entry> *entry_list, void* ptr){
     auto iter = (*entry_list).begin();
 
-    while(iter != (*entry_list).end() && *(iter->second.address) != ptr ){
+    while(iter != (*entry_list).end() && iter->second.address != ptr ){
         ++iter;
     }
 
-    if(iter ==(*entry_list).end() && *(iter->second.address) != ptr) {
+    if(iter ==(*entry_list).end() && iter->second.address != ptr) {
         DEBUG_PRINT(RED "Can't find ptr inside entry\n" RESET);
         exit(-1);
     }
@@ -250,26 +298,46 @@ void Cleanup(){
 }
 
 /* Swap in handler */
+// void swapin(int signum){
+//     DEBUG_PRINT(GREEN "Swap-in (SIGUSR2) handler callback\n" RESET);
+//     // iterate swap entry list
+//     for(auto iter = swap_entry_list.begin(); iter != swap_entry_list.end(); iter++){
+//         int index = iter->first;
+//         size_t size = iter->second.size;
+
+//         void * devPtr = iter->second.gpu_address;
+//         char * hosPtr = (char *)iter->second.cpu_address;
+        
+//         cudaMalloc(&devPtr,&devPtr,size,index);
+//         cudaMemcpy(devPtr, hosPtr, size, cudaMemcpyHostToDevice);
+//         free(hosPtr);
+//     }
+//     swap_entry_list.clear();
+//     DEBUG_PRINT_SWAP();
+//     DEBUG_PRINT_ENTRY();
+// } 
+
 void swapin(int signum){
     DEBUG_PRINT(GREEN "Swap-in (SIGUSR2) handler callback\n" RESET);
-    // iterate swap entry list
     for(auto iter = swap_entry_list.begin(); iter != swap_entry_list.end(); iter++){
         int index = iter->first;
         size_t size = iter->second.size;
+        void* new_address;
+        void* old_address = iter->second.gpu_address;
+        char* hostPtr = (char *)iter->second.cpu_address;
 
-        void * devPtr = 0ULL;
-        void ** ddevPtr = iter->second.gpu_address;
-        char * hosPtr = (char *)iter->second.cpu_address;
-        
-        cudaMalloc(&devPtr,ddevPtr,size,index);
-        cudaMemcpy(devPtr, hosPtr, size, cudaMemcpyHostToDevice);
-        *ddevPtr = devPtr;
-        free(hosPtr);
-    }
+        cudaMalloc(&new_address, size, index);
+        lcudaMemcpy(new_address, hostPtr, size, cudaMemcpyHostToDevice);
+        free(hostPtr);
+        /* page table update */
+        DEBUG_PRINT(GREEN "Swap in Addr: %p, Size: %d\n" RESET, new_address, size);
+        pagetable[old_address] = new_address;
+    } 
     swap_entry_list.clear();
-    DEBUG_SWAP_PRINT();
+    DEBUG_PRINT_SWAP();
     DEBUG_PRINT_ENTRY();
-} 
+    DEBUG_PRINT_PAGETABLE();
+}
 
 /* Swap out handler */
 void swapout(int signum){
@@ -283,32 +351,28 @@ void swapout(int signum){
     
     DEBUG_PRINT(GREEN "Swap-out Range [%d, %d]\n" RESET,msg->start_idx, msg->end_idx);
     
-    for(auto iter = gpu_entry_list.cbegin(); iter != gpu_entry_list.cend(); ){
-        int index = iter->first;
-        size_t size = iter->second.size;
-        if(index >= msg->start_idx && index <= msg->end_idx){
-            void** ddevPtr = iter->second.address;
-            char * hosPtr =(char *)malloc(size);
+    for(int i = msg->start_idx; i <=msg->end_idx; i++){
+        int index = i;
+        size_t size = gpu_entry_list[index].size;
+        void * devPtr = gpu_entry_list[index].address;
+        void * hostPtr = (char *)malloc(size);
 
-            CHECK_CUDA(cudaMemcpy(hosPtr, *ddevPtr, size, cudaMemcpyDeviceToHost));
-            add_swap_entry(&swap_entry_list, index, ddevPtr, hosPtr, size);
+        CHECK_CUDA(lcudaMemcpy(hostPtr, devPtr, size, cudaMemcpyDeviceToHost));
+        add_swap_entry(&swap_entry_list, index, devPtr, hostPtr, size);
+
+        CHECK_CUDA(cudaFree(devPtr));
             
-            // MAP Erase sucks... it must be done in this way 
-            DEBUG_PRINT(BLUE "cudaFree\n" RESET);
-            SendRequest(*ddevPtr, _cudaFree_, 0);
-            CHECK_CUDA(lcudaFree(*ddevPtr));
-            gpu_entry_list.erase(iter++);
-
-            DEBUG_PRINT(GREEN "Swap out Addr: %p, Size: %d\n" RESET, *ddevPtr, size);
-        }else{
-            ++iter;
+        if(pagetable.size() != 0){
+            pagetable.erase(devPtr);
         }
+        DEBUG_PRINT(GREEN "Swap out Addr: %p, Size: %d\n" RESET, devPtr, size);
     }
     DEBUG_PRINT_ENTRY();
-    DEBUG_SWAP_PRINT();
+    DEBUG_PRINT_SWAP();
+    DEBUG_PRINT_PAGETABLE();
 }
 
-void add_swap_entry(map<int,gswap>* entry_list, int index, void** gpuPtr, void* cpuPtr, size_t size){
+void add_swap_entry(map<int,gswap>* entry_list, int index, void* gpuPtr, void* cpuPtr, size_t size){
     DEBUG_PRINT(BLUE "Add (Swap): {%d, [%p, %p, %d]}\n" RESET, index, gpuPtr, cpuPtr, size);
     gswap tmp;
     tmp.gpu_address = gpuPtr;
@@ -325,3 +389,17 @@ char * getcudaAPIString(cudaAPI type){
             return string(_cudaFree_);
     }
 }
+
+
+cudaError_t cudaLaunchKernel( const void* func, dim3 gridDim, dim3 blockDim, void** args, size_t sharedMem, cudaStream_t stream){
+    cudaError_t err;
+    DEBUG_PRINT(RED"args %p\n"RESET,args);
+    for(int i = 0; i < 15; i++){
+        DEBUG_PRINT(RED"%p\n"RESET,args[i]);
+        //DEBUG_PRINT(RED"%p\n"RESET,*((int *)args[i]));
+    }
+    DEBUG_PRINT(RED"====================\n"RESET);
+    err = lcudaLaunchKernel(func, gridDim, blockDim, args, sharedMem, stream);
+    return err;
+}
+

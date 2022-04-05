@@ -9,31 +9,22 @@
 
 using namespace std;
 
+__global__ void test(int * tmp){
+    for(int i = 0; i < 10; i++){
+        printf("Say hello\n");
+    }
+}
+
+
 int main(void){
-    
-    int *offset;
-    cudaMalloc(&offset, sizeof(char));
+    dim3 gridDim;
+    dim3 blockDim;
+    int * tmp;
+    cudaMalloc(&tmp, sizeof(int)*100);
+    printf("host space : %p\n", tmp);
+    test<<<gridDim, blockDim>>>(tmp);
+    void *args[] = {(void*)tmp};
+    cudaLaunchKernel((void*)test,gridDim,blockDim,args,0,NULL);
 
-    void *d_a[10];
-    void *a;
-    a = (void *)malloc(sizeof(int)*1000);
-
-    for(int i = 0; i < 5; i++){
-        cudaMalloc(&d_a[i], sizeof(int)*1000);
-        printf("%d th address: %p\n",i, d_a[i]);
-    }
-
-    cudaFree(d_a[0]);
-    cudaFree(d_a[2]);
-    cudaFree(d_a[4]);
-    cudaFree(d_a[1]);
-    for(int i = 0; i < 5; i++){
-    void *c;
-    cudaMalloc(&c, sizeof(int));
-    printf("target address: %p\n", c);
-    }
-    printf("dummy %p\n",d_a[0]);
-    printf("dummy %p\n",d_a[2]);
-    printf("dummy %p\n",d_a[4]);
     return 0;
 }

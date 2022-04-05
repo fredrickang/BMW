@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <iostream>
 #include <stdlib.h>
@@ -9,6 +10,10 @@
 #include <list>
 #include <pthread.h>
 
+#include <sys/syscall.h>
+#define gettid() syscall(SYS_gettid)
+
+
 #define BLUE "\x1b[34m"  //info 
 #define GREEN "\x1b[32m" //highlight
 #define RED "\x1b[31m" // error
@@ -18,7 +23,7 @@
 #define commErrchk(ans) {commAssert((ans), __FILE__, __LINE__);}
 inline void commAssert(int code, const char *file, int line, bool abort=true){
     if(code < 0){
-        fprintf(stderr, RED "[customHook][%s:%3d]: [%d] CommError: %d\n" RESET,file,line, getpid(),code);
+        fprintf(stderr, RED "[customHook][%s:%3d]: [%d] CommError: %d\n" RESET,file,line, gettid(),code);
         if (abort) exit(code);
     }
 }
@@ -26,7 +31,7 @@ inline void commAssert(int code, const char *file, int line, bool abort=true){
 #define CHECK_CUDA(ans) {check_cuda((ans), __FILE__, __LINE__);}
 inline void check_cuda(int code, const char *file, int line, bool abort=true){
     if(code != 0){
-        fprintf(stderr, RED "[customHook][%s:%3d]: [%d] CUDAERROR: %d\n" RESET,file,line, getpid(),code);
+        fprintf(stderr, RED "[customHook][%s:%3d]: [%d] CUDAERROR: %d\n" RESET,file,line, gettid(),code);
         if (abort) exit(code);
     }
 }
@@ -34,7 +39,7 @@ inline void check_cuda(int code, const char *file, int line, bool abort=true){
 
 #ifdef DEBUG
 #define DEBUG_PRINT(fmt, args...) fprintf(stderr, "[customHook][%s:%3d:%20s()]: [%d] " fmt, \
-__FILE__, __LINE__, __func__, getpid(), ##args)
+__FILE__, __LINE__, __func__, gettid(), ##args)
 #else
 #define DEBUG_PRINT(fmt, args...)
 #endif
@@ -53,13 +58,13 @@ using namespace std;
 
 
 typedef struct _ENTRY{
-    void** address;
+    void* address;
     size_t size;
 }entry;
 
 typedef struct _SWAP{
-    void** gpu_address;
-     void* cpu_address;
+    void* gpu_address;
+    void* cpu_address;
     size_t size;
 }gswap;
 
@@ -70,7 +75,7 @@ static bool SWAP_OUT = false;
 static int entry_index = 0;
 static  map<int,entry> gpu_entry_list;
 static map<int,gswap> swap_entry_list;
-
+static map<void*, void*> pagetable;
 int request_fd = -1;
 int decision_fd = -1;
 int register_fd = -1;
@@ -107,10 +112,10 @@ void close_channels();
 void close_channel(char * pipe_name);
 void Cleanup();
 
-void add_entry(map<int,entry>* entry_list, int index,  void** devPtr, size_t size);
+void add_entry(map<int,entry>* entry_list, int index,  void* devPtr, size_t size);
 void del_entry(map<int,entry>* entry_list,  void* devPtr);
 
-void add_swap_entry(map<int,gswap>* entry_list, int index,  void** gpuPtr,  void* cpuPtr, size_t size);
+void add_swap_entry(map<int,gswap>* entry_list, int index,  void* gpuPtr,  void* cpuPtr, size_t size);
 void del_swap_entry(map<int,gswap>* entry_list,  void* devPtr);
 
 int find_index_by_ptr(map<int,entry>* entry_list,  void* devPtr);
@@ -122,3 +127,5 @@ void DEBUG_PRINT_ENTRY();
 /* CUDA memory hook */
 static cudaError_t (*lcudaMalloc)(void **, size_t) = (cudaError_t (*) (void**, size_t))dlsym(RTLD_NEXT,"cudaMalloc");
 static cudaError_t (*lcudaFree) (void*) = (cudaError_t (*) (void *))dlsym(RTLD_NEXT,"cudaFree");
+static cudaError_t (*lcudaMemcpy) (void*, const void*, size_t, cudaMemcpyKind) = (cudaError_t (*) (void*, const void*, size_t, cudaMemcpyKind))dlsym(RTLD_NEXT, "cudaMemcpy");
+static cudaError_t (*lcudaLaunchKernel) (const void*, dim3, dim3, void**, size_t, cudaStream_t) = (cudaError_t (*) (const void*, dim3, dim3, void**, size_t, cudaStream_t))dlsym(RTLD_NEXT, "cudaLaunchKernel");

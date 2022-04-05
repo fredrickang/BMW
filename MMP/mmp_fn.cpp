@@ -15,7 +15,9 @@
 #include "mmp_fn.hpp"
 
 #define string(x) #x
-#define MEM_LIMIT 32212254720
+#define MEM_LIMIT 40000
+//#define MEM_LIMIT 10737418240 // 10GB
+//#define MEM_LIMIT 32212254720 // 30GB
 
 extern int mmp2sch_fd;
 extern int sch2mmp_fd;
@@ -257,7 +259,7 @@ void swapout(_proc_list* proc_list, _proc* proc, size_t size){
     msg->start_idx = evict_entry_front;
     msg->end_idx = evict_entry_back;
 
-    DEBUG_PRINT(GREEN "[SWAP OUT] Victim: %d, Size: %d, Index: %d to %d\n" RESET, proc->pid, size, evict_entry_front, evict_entry_front);
+    DEBUG_PRINT(GREEN "[SWAP OUT] Victim: %d, Size: %d, Index: %d to %d\n" RESET, proc->pid, size, evict_entry_front, evict_entry_back);
 
     commErrchk(write(proc->decision_fd, msg, sizeof(int)*EVI_MSG_SIZE));    
    
