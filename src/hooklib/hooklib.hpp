@@ -127,3 +127,4 @@ static cudaError_t (*lcudaMalloc)(void **, size_t) = (cudaError_t (*) (void**, s
 static cudaError_t (*lcudaFree) (void*) = (cudaError_t (*) (void *))dlsym(RTLD_NEXT,"cudaFree");
 static cudaError_t (*lcudaMemcpy) (void*, const void*, size_t, cudaMemcpyKind) = (cudaError_t (*) (void*, const void*, size_t, cudaMemcpyKind))dlsym(RTLD_NEXT, "cudaMemcpy");
 static cudaError_t (*lcudaLaunchKernel) (const void*, dim3, dim3, void**, size_t, cudaStream_t) = (cudaError_t (*) (const void*, dim3, dim3, void**, size_t, cudaStream_t))dlsym(RTLD_NEXT, "cudaLaunchKernel");
+static cudaError_t (*lcudaMemsetAsync) (void*, int, size_t, cudaStream_t) = (cudaError_t (*) (void*, int, size_t, cudaStream_t))dlsym(RTLD_NEXT, "cudaMemsetAsync");

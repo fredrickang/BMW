@@ -23,9 +23,7 @@
 
 using namespace std;
 
-void fake_kernel_launch(){
 
-}
 
 cudaError_t cudaMalloc(void **devPtr, size_t size){   
     cudaError_t err;
@@ -96,17 +94,30 @@ cudaError_t cudaMemcpy(void* dst, const void* src, size_t size, cudaMemcpyKind k
         if(kind == cudaMemcpyHostToDevice){
             if (pagetable.find(dst) != pagetable.end()) {
                 remapped_dst = pagetable[dst];
-                DEBUG_PRINT(RED "Re-direceted %p -> %p\n" RESET,dst, remapped_dst);
+                DEBUG_PRINT(RED "Re-direceted %p -> %p\n" RESET, dst, remapped_dst);
             }
         }else{
             if (pagetable.find((void *)src) != pagetable.end() ){
                 remapped_src = (const void*)pagetable[(void *)src];
-                DEBUG_PRINT(RED "Re-direceted %p -> %p\n" RESET,src, remapped_src);
+                DEBUG_PRINT(RED "Re-direceted %p -> %p\n" RESET, src, remapped_src);
             } 
         }
     }
     cudaError_t err = cudaSuccess;
     CHECK_CUDA(lcudaMemcpy(remapped_dst, remapped_src, size, kind));
+    return err;
+}
+
+cudaError_t cudaMemsetAsync(void* devPtr, int value, size_t count, cudaStream_t stream){
+    void* remapped_dev = devPtr;
+    if(pagetable.size() != 0){
+        if(pagetable.find(devPtr) != pagetable.end()){
+            remapped_dev = pagetable[devPtr];
+            DEBUG_PRINT(RED "Re-direceted %p -> %p\n" RESET, devPtr, remapped_dev);
+        }
+    }
+    cudaError_t err = cudaSuccess;
+    CHECK_CUDA(lcudaMemsetAsync(remapped_dev, value, count, stream));
     return err;
 }
 
