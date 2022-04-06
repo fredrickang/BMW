@@ -406,23 +406,47 @@ char * getcudaAPIString(cudaAPI type){
 }
 
 
+
 cudaError_t cudaLaunchKernel( const void* func, dim3 gridDim, dim3 blockDim, void** args, size_t sharedMem, cudaStream_t stream){
     cudaError_t err;
-    int arg_size = *(int *)args[0];
-    DEBUG_PRINT(RED"arg_size :%d\n"RESET,arg_size);
-    void *new_args[arg_size];
+    void * zero_args = (void *)0x100000001;
 
-    for(int i = 1; i < arg_size+1; i++){
-        DEBUG_PRINT(RED"Old args: %p\n"RESET,*(void **)args[i]);
-        if(pagetable.find(*(void **)args[i])!= pagetable.end()){
-            DEBUG_PRINT(RED"New args: %p\n"RESET,pagetable[*(void **)args[i]]);
-            new_args[i-1] = (void *)&pagetable[*(void **)args[i]];
-        } 
-        else new_args[i-1] = args[i];
+    if(args[0] != zero_args){
+        int arg_size = 0;
+        int Done = 0;
+        while(1){
+            if( (char *)args[arg_size] - (char *)args[arg_size+1] != 8 ) Done = 1;
+            if(pagetable.find(*(void **)args[arg_size]) != pagetable.end()){
+                args[arg_size] = (void *)&pagetable[*(void **)args[arg_size]];
+            }
+            if(Done) break;
+            arg_size++;
+        }
     }
-    
     err = cudaSuccess;
-    CHECK_CUDA(lcudaLaunchKernel(func, gridDim, blockDim, new_args, sharedMem, stream));
+    CHECK_CUDA(lcudaLaunchKernel(func, gridDim, blockDim, args, sharedMem, stream));
     return err;
 }
+
+
+
+// cudaError_t cudaLaunchKernel( const void* func, dim3 gridDim, dim3 blockDim, void** args, size_t sharedMem, cudaStream_t stream){
+//     cudaError_t err;
+//     int arg_size = *(int *)args[0];
+//     DEBUG_PRINT(RED"arg_size :%d\n"RESET,arg_size);
+//     void *new_args[arg_size];
+
+//     for(int i = 1; i < arg_size+1; i++){
+//         DEBUG_PRINT(RED"Old args: %p\n"RESET,*(void **)args[i]);
+//         if(pagetable.find(*(void **)args[i])!= pagetable.end()){
+//             DEBUG_PRINT(RED"New args: %p\n"RESET,pagetable[*(void **)args[i]]);
+//             new_args[i-1] = (void *)&pagetable[*(void **)args[i]];
+//         } 
+//         else new_args[i-1] = args[i];
+//     }
+    
+//     err = cudaSuccess;
+//     CHECK_CUDA(lcudaLaunchKernel(func, gridDim, blockDim, new_args, sharedMem, stream));
+//     return err;
+// }
 
