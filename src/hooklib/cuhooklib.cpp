@@ -45,8 +45,6 @@ cudaError_t cudaMalloc(void **devPtr, size_t size){
         fake_address--;
         pagetable[old_address] = new_address;
         *devPtr = old_address;
-        DEBUG_PRINT(RED"Orig Address: %p\n"RESET, new_address);
-        DEBUG_PRINT(RED"Fake Address: %p\n"RESET, old_address);
         DEBUG_PRINT_PAGETABLE();
     }
     return err;
@@ -405,22 +403,43 @@ char * getcudaAPIString(cudaAPI type){
     }
 }
 
+static int possible_arg_sizes[] = {1,2,4,8,12};
+static int num_arg_size = 5;
+// bool is_arg_size(int diff){
+//     for(int i = 0; i < num_arg_size; i++){
+//         if(possible_arg_sizes[i] == diff) return true;
+//     }
+//     return false;
+// }
+bool is_arg_size(int diff){
+    if(diff > 100 || diff < -100) return false;
+    return true;
+}
 
 
-cudaError_t cudaLaunchKernel( const void* func, dim3 gridDim, dim3 blockDim, void** args, size_t sharedMem, cudaStream_t stream){
+cudaError_t cudaLaunchKernel(const void* func, dim3 gridDim, dim3 blockDim, void** args, size_t sharedMem, cudaStream_t stream){
     cudaError_t err;
-    void * zero_args = (void *)0x100000001;
-
-    if(args[0] != zero_args){
-        int arg_size = 0;
-        int Done = 0;
-        while(1){
-            if( (char *)args[arg_size] - (char *)args[arg_size+1] != 8 ) Done = 1;
-            if(pagetable.find(*(void **)args[arg_size]) != pagetable.end()){
-                args[arg_size] = (void *)&pagetable[*(void **)args[arg_size]];
+    if(pagetable.size() != 0){
+        void * zero_args = (void *)0x100000001;
+        DEBUG_PRINT("cudaLaunchKernel\n");
+        if(args[0] != zero_args){
+            int arg_size = 0;
+            int Done = 0;
+            while(1){
+                int diff = (char *)args[arg_size] - (char *)args[arg_size+1];
+                fprintf(stderr, "%d\n",diff);
+                if( !is_arg_size((char *)args[arg_size] - (char *)args[arg_size+1]) ) Done = 1;
+                DEBUG_PRINT(RED"args[%d]: %p\n",arg_size, args[arg_size]);
+                DEBUG_PRINT(RED"args[%d]: %p\n",arg_size+1, args[arg_size+1]);
+                DEBUG_PRINT(RED"%p", *(void **)args[arg_size]);
+                if(pagetable.find(*(void **)args[arg_size]) != pagetable.end()){
+                    //fprintf(stderr, " -> %p", pagetable[*(void **)args[arg_size]]);
+                    args[arg_size] = (void *)&pagetable[*(void **)args[arg_size]];
+                }
+                //fprintf(stderr,"\n"RESET);
+                if(Done) break;
+                arg_size++;
             }
-            if(Done) break;
-            arg_size++;
         }
     }
     err = cudaSuccess;

@@ -18,9 +18,17 @@
 #define RED "\x1b[31m" // error
 #define RESET "\x1b[0m" 
 
+
+// #define BLUE  //info 
+// #define GREEN  //highlight
+// #define RED   // error
+// #define RESET  
+
+
+
 #define gettid() syscall(SYS_gettid)
 
-#define DEBUG
+//#define DEBUG
 #define CHECK_COMM(ans) {check_comm((ans), __FILE__, __LINE__);}
 inline void check_comm(int code, const char *file, int line, bool abort=true){
     if(code < 0){
