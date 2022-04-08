@@ -1,4 +1,5 @@
 #define _GNU_SOURCE
+
 #include <stdio.h>
 #include <iostream>
 #include <stdlib.h>
@@ -10,6 +11,10 @@
 #include <list>
 #include <pthread.h>
 #include <sys/syscall.h>
+
+#include "cuda_runtime.h"
+#include "curand.h"
+#include "cublas_v2.h"
 
 #define string(x) #x
 
@@ -136,3 +141,4 @@ static cudaError_t (*lcudaFree) (void*) = (cudaError_t (*) (void *))dlsym(RTLD_N
 static cudaError_t (*lcudaMemcpy) (void*, const void*, size_t, cudaMemcpyKind) = (cudaError_t (*) (void*, const void*, size_t, cudaMemcpyKind))dlsym(RTLD_NEXT, "cudaMemcpy");
 static cudaError_t (*lcudaLaunchKernel) (const void*, dim3, dim3, void**, size_t, cudaStream_t) = (cudaError_t (*) (const void*, dim3, dim3, void**, size_t, cudaStream_t))dlsym(RTLD_NEXT, "cudaLaunchKernel");
 static cudaError_t (*lcudaMemsetAsync) (void*, int, size_t, cudaStream_t) = (cudaError_t (*) (void*, int, size_t, cudaStream_t))dlsym(RTLD_NEXT, "cudaMemsetAsync");
+static cublasStatus_t (*lcublasSgemm) (cublasHandle_t, cublasOperation_t, cublasOperation_t, int, int, int, const float*, const float*, int, const float*, int, const float*, float*, int) = (cublasStatus_t (*) (cublasHandle_t, cublasOperation_t, cublasOperation_t, int, int, int, const float*, const float*, int, const float*, int, const float*, float*, int))dlsym(RTLD_NEXT,"cublasSgemm_v2");

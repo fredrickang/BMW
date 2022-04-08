@@ -11,14 +11,15 @@
 
 #include <math.h>
 #include <cuda.h>
-#include <cuda_runtime.h>
 
 #include <iostream>
 #include <list>
 #include <map>
 #include <algorithm>
 #include <cassert>
-
+#include "cuda_runtime.h"
+#include "curand.h"
+#include "cublas_v2.h"
 #include "hooklib.hpp"
 
 using namespace std;
@@ -118,6 +119,34 @@ cudaError_t cudaMemsetAsync(void* devPtr, int value, size_t count, cudaStream_t 
     CHECK_CUDA(lcudaMemsetAsync(remapped_dev, value, count, stream));
     return err;
 }
+cublasStatus_t cublasSgemm(cublasHandle_t handle,
+                           cublasOperation_t transa, cublasOperation_t transb,
+                           int m, int n, int k,
+                           const float           *alpha,
+                           const float           *A, int lda,
+                           const float           *B, int ldb,
+                           const float           *beta,
+                           float           *C, int ldc){
+    void * remapped_A = (void *)A;
+    void * remapped_B = (void *)B;
+    void * remapped_C = (void *)C;
+    if(pagetable.size() != 0){
+        if(pagetable.find((void *)A) != pagetable.end()){
+            remapped_A = pagetable[(void *)A];
+        }
+        if(pagetable.find((void *)B) != pagetable.end()){
+            remapped_B = pagetable[(void *)B];
+        }
+        if(pagetable.find((void *)C) != pagetable.end()){
+            remapped_C = pagetable[(void *)C];
+        }
+    }
+
+    cublasStatus_t err = lcublasSgemm(handle, transa, transb, m, n, k, alpha, (const float *)remapped_A, lda, (const float *)remapped_B, ldb, (const float *)beta, (float *)remapped_C, ldc);
+    
+    return err;
+}
+
 
 /* Swap-in handler */
 void swapin(int signum){
@@ -403,49 +432,71 @@ char * getcudaAPIString(cudaAPI type){
     }
 }
 
-static int possible_arg_sizes[] = {1,2,4,8,12};
-static int num_arg_size = 5;
-// bool is_arg_size(int diff){
-//     for(int i = 0; i < num_arg_size; i++){
-//         if(possible_arg_sizes[i] == diff) return true;
-//     }
-//     return false;
-// }
-bool is_arg_size(int diff){
-    if(diff > 100 || diff < -100) return false;
-    return true;
-}
 
 
-cudaError_t cudaLaunchKernel(const void* func, dim3 gridDim, dim3 blockDim, void** args, size_t sharedMem, cudaStream_t stream){
+cudaError_t cudaLaunchKernel( const void* func, dim3 gridDim, dim3 blockDim, void** args, size_t sharedMem, cudaStream_t stream){
     cudaError_t err;
     if(pagetable.size() != 0){
-        void * zero_args = (void *)0x100000001;
-        DEBUG_PRINT("cudaLaunchKernel\n");
-        if(args[0] != zero_args){
-            int arg_size = 0;
-            int Done = 0;
-            while(1){
-                int diff = (char *)args[arg_size] - (char *)args[arg_size+1];
-                fprintf(stderr, "%d\n",diff);
-                if( !is_arg_size((char *)args[arg_size] - (char *)args[arg_size+1]) ) Done = 1;
-                DEBUG_PRINT(RED"args[%d]: %p\n",arg_size, args[arg_size]);
-                DEBUG_PRINT(RED"args[%d]: %p\n",arg_size+1, args[arg_size+1]);
-                DEBUG_PRINT(RED"%p", *(void **)args[arg_size]);
-                if(pagetable.find(*(void **)args[arg_size]) != pagetable.end()){
-                    //fprintf(stderr, " -> %p", pagetable[*(void **)args[arg_size]]);
-                    args[arg_size] = (void *)&pagetable[*(void **)args[arg_size]];
-                }
-                //fprintf(stderr,"\n"RESET);
-                if(Done) break;
-                arg_size++;
+        int arg_size = *(int *)args[0];
+        DEBUG_PRINT(RED"arg_size :%d\n"RESET,arg_size);
+        for(int i = 1; i < arg_size+1; i++){
+            DEBUG_PRINT(RED"%p", *(void **)args[i]);
+            if(pagetable.find(*(void **)args[i]) != pagetable.end()){
+                //fprintf(stderr, " -> %p", pagetable[*(void **)args[i]]);
+                args[i] = (void *)&pagetable[*(void **)args[i]];
             }
+            //fprintf(stderr,"\n"RESET); 
         }
     }
     err = cudaSuccess;
     CHECK_CUDA(lcudaLaunchKernel(func, gridDim, blockDim, args, sharedMem, stream));
     return err;
 }
+
+// static int possible_arg_sizes[] = {1,2,4,8,12};
+// static int num_arg_size = 5;
+// // bool is_arg_size(int diff){
+// //     for(int i = 0; i < num_arg_size; i++){
+// //         if(possible_arg_sizes[i] == diff) return true;
+// //     }
+// //     return false;
+// // }
+// bool is_arg_size(int diff){
+//     if(diff > 100 || diff < -100) return false;
+//     return true;
+// }
+
+
+/* cudaLaunchKernel with assuming the number of args (deprecated)*/
+// cudaError_t cudaLaunchKernel(const void* func, dim3 gridDim, dim3 blockDim, void** args, size_t sharedMem, cudaStream_t stream){
+//     cudaError_t err;
+//     if(pagetable.size() != 0){
+//         void * zero_args = (void *)0x100000001;
+//         DEBUG_PRINT("cudaLaunchKernel\n");
+//         if(args[0] != zero_args){
+//             int arg_size = 0;
+//             int Done = 0;
+//             while(1){
+//                 int diff = (char *)args[arg_size] - (char *)args[arg_size+1];
+//                 fprintf(stderr, "%d\n",diff);
+//                 if( !is_arg_size((char *)args[arg_size] - (char *)args[arg_size+1]) ) Done = 1;
+//                 DEBUG_PRINT(RED"args[%d]: %p\n",arg_size, args[arg_size]);
+//                 DEBUG_PRINT(RED"args[%d]: %p\n",arg_size+1, args[arg_size+1]);
+//                 DEBUG_PRINT(RED"%p", *(void **)args[arg_size]);
+//                 if(pagetable.find(*(void **)args[arg_size]) != pagetable.end()){
+//                     //fprintf(stderr, " -> %p", pagetable[*(void **)args[arg_size]]);
+//                     args[arg_size] = (void *)&pagetable[*(void **)args[arg_size]];
+//                 }
+//                 //fprintf(stderr,"\n"RESET);
+//                 if(Done) break;
+//                 arg_size++;
+//             }
+//         }
+//     }
+//     err = cudaSuccess;
+//     CHECK_CUDA(lcudaLaunchKernel(func, gridDim, blockDim, args, sharedMem, stream));
+//     return err;
+// }
 
 
 
