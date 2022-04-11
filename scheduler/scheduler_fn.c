@@ -12,7 +12,7 @@
 
 #include "scheduler_fn.h"
 
-#define DEBUG
+
 #define REG_MSG_SIZE 3
 
 #define BLUE "\x1b[34m" //info
@@ -34,6 +34,8 @@ inline void commAssert(int code, const char *file, int line){
 #ifdef DEBUG
 #define DEBUG_PRINT(fmt, args...) fprintf(stderr, "[scheduler][%s:%3d:%20s()]: " fmt, \
 __FILE__, __LINE__, __func__, ##args)
+#else
+#define DEBUG_PRINT(fmt, args...) 
 #endif
 
 void set_priority(int priority){
@@ -282,7 +284,7 @@ void request_handler(task_list_t *task_list, task_info_t *task, resource_t *res,
     }
     else{ /* Job release */
         DEBUG_PRINT(GREEN"Release Job(%d)\n"RESET,task->priority);
-        enqueue(res->waiting,task->pid, task->priority);
+        enqueue(res->waiting, task->pid, task->priority);
     }
 
 }

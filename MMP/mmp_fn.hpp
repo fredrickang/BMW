@@ -1,15 +1,23 @@
-
 #define BLUE "\x1b[34m" 
 #define GREEN "\x1b[32m" 
 #define RED "\x1b[31m"
 #define RESET "\x1b[0m" 
 
 #define DEBUG
+
 #ifdef DEBUG
-#define commErrchk(ans) {commAssert((ans), __FILE__, __LINE__);}
-inline void commAssert(int code, const char *file, int line, bool abort=true){
+#define commErrchk(ans) {check_comm((ans), __FILE__, __LINE__);}
+inline void check_comm(int code, const char *file, int line, bool abort=true){
     if(code < 0){
-        fprintf(stderr, RED"[customHook][%s:%3d]: [%d] CommError: %d\n"RESET,file,line, getpid(),code);
+        fprintf(stderr, RED"[MMP][%s:%3d]: [%d] CommError: %d\n"RESET,file,line, getpid(),code);
+        if (abort) exit(code);
+    }
+}
+#else
+#define commErrchk(ans) {check_comm((ans), __FILE__, __LINE__);}
+inline void check_comm(int code, const char *file, int line, bool abort=true){
+    if(code < 0){
+        fprintf(stderr, RED"[MMP][%s:%3d]: [%d] CommError: %d\n"RESET,file,line, getpid(),code);
         if (abort) exit(code);
     }
 }

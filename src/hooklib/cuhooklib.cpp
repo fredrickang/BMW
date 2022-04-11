@@ -405,8 +405,8 @@ void Cleanup(){
     CHECK_COMM(write(register_fd, reg, sizeof(int)*2));
     DEBUG_PRINT(BLUE "==De-registration done==\n" RESET);
     
-    kill(0, SIGTERM);
-    pthread_join(swap_thread_id, NULL);
+    //kill(0, SIGTERM);
+    //pthread_join(swap_thread_id, NULL);
     DEBUG_PRINT(BLUE "Swap Thread terminated\n" RESET);
 
     DEBUG_PRINT(GREEN "==Termination Sequence Done==\n" RESET);

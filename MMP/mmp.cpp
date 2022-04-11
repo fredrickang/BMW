@@ -22,7 +22,7 @@
 
 int mmp2sch_fd = -1;
 int sch2mmp_fd = -1;
-
+int Init = 0;
 int main(int argc, char **argv){
 
     _proc_list *proc_list = create_proc_list();
@@ -40,6 +40,7 @@ int main(int argc, char **argv){
         
         if(select(fd_head + 1, &readfds, NULL, NULL, NULL)){
             if(FD_ISSET(reg_fd, &readfds)){
+                Init = 1;
                 check_registration(proc_list, reg_fd);
             }
             for(_proc *proc = proc_list->head; proc !=NULL; proc = proc->next){
@@ -51,7 +52,7 @@ int main(int argc, char **argv){
                 swapin(proc_list);
             }
         }
-    }while(1);
+    }while((!(proc_list -> count == 0)));
 
     
     return 0;
