@@ -24,8 +24,6 @@
 
 using namespace std;
 
-
-
 cudaError_t cudaMalloc(void **devPtr, size_t size){   
     cudaError_t err;
     if(!init){

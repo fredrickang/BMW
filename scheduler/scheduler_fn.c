@@ -22,7 +22,7 @@
 
 extern int mmp2sch_fd;
 extern int sch2mmp_fd;
-
+extern FILE **fps;
 #define commErrchk(ans) {commAssert((ans), __FILE__, __LINE__);}
 inline void commAssert(int code, const char *file, int line){
     if(code < 0){
@@ -37,6 +37,15 @@ __FILE__, __LINE__, __func__, ##args)
 #else
 #define DEBUG_PRINT(fmt, args...) 
 #endif
+
+double what_time_is_it_now()
+{
+    struct timeval time;
+    if (gettimeofday(&time,NULL)){
+        return 0;
+    }
+    return (double)time.tv_sec + (double)time.tv_usec * .000001;
+}
 
 void set_priority(int priority){
     struct sched_param prior;
@@ -184,6 +193,34 @@ int enqueue(queue_t *q, int pid, int priority){
     print_queue("WQ", q);
 }
 
+int enqueue_backward(queue_t *q, int pid, int priority){
+    DEBUG_PRINT(BLUE"Enqueue Job(%d %d)\n"RESET,pid, priority);
+    node_t *tmp = new_node(pid, priority);
+    q->count ++;    
+    
+    if(q->front == NULL){
+        q->front = tmp;
+        print_queue("WQ", q);
+        return -1;
+    }    
+
+    if(q->front -> priority < tmp-> priority ){
+        tmp->next = q->front;
+        q->front = tmp;
+    }
+    else{
+        node_t *iter = q->front;
+        while(iter->next != NULL && iter->next->priority < tmp->priority){
+            iter = iter->next;
+        }
+        tmp->next = iter->next;
+        iter->next = tmp;
+    }
+    print_queue("WQ", q);
+}
+
+
+
 int dequeue(queue_t *q, double current_time, resource_t *res){
     if (q -> front == NULL){
         //DEBUG_PRINT(RED"Waiting Queue empty\n"RESET);
@@ -199,6 +236,7 @@ int dequeue(queue_t *q, double current_time, resource_t *res){
 
     res -> state = BUSY;
     res -> pid  = target_pid;  
+    res -> scheduled = what_time_is_it_now();
     
     q -> count --;
     free(target);
@@ -266,6 +304,7 @@ void deregister(task_list_t *task_list, reg_msg *msg, resource_t *res){
     task_info_t *target = find_task_by_pid(task_list, msg -> pid);
     pid = target -> pid;
     close_channels(target);
+    fclose(fps[target->priority-1]);
     de_register_task(task_list, target);
         
     if (res-> pid == pid) res->state = IDLE;
@@ -273,12 +312,24 @@ void deregister(task_list_t *task_list, reg_msg *msg, resource_t *res){
 
 // Request Handler //
 
-void request_handler(task_list_t *task_list, task_info_t *task, resource_t *res, double current_time){    
+void request_handler(task_list_t *task_list, task_info_t *task, resource_t *res, resource_t *init_que, double current_time){    
     int ack;
     commErrchk(read(task -> request_fd, &ack, sizeof(int)*1));
-
-    if( res -> state == BUSY && res -> pid == task->pid){ /* Job termniation */
+    
+    if(ack == 99){
+        enqueue_backward(init_que->waiting, task->pid, task->priority);
+        return;
+    }
+    if(init_que -> state == BUSY && init_que -> pid == task -> pid){
+        DEBUG_PRINT(GREEN"Init done(%d)\n"RESET,task->priority);
+        fprintf(fps[task->priority-1],"%f,",(what_time_is_it_now() - init_que->scheduled));
+        init_que -> state = IDLE;
+        init_que -> pid = -1;
+    }
+    
+    if(res -> state == BUSY && res -> pid == task->pid){ /* Job termniation */
         DEBUG_PRINT(GREEN"Term Job(%d)\n"RESET,task->priority);
+        fprintf(fps[task->priority],"%f\n",(what_time_is_it_now() - res->scheduled));
         res -> state = IDLE;
         res -> pid = -1;
     }
@@ -287,6 +338,15 @@ void request_handler(task_list_t *task_list, task_info_t *task, resource_t *res,
         enqueue(res->waiting, task->pid, task->priority);
     }
 
+}
+
+void init_decision_handler(int target_pid, task_list_t *task_list){
+
+    int ack = 0;
+    task_info_t *target = find_task_by_pid(task_list, target_pid);
+
+    DEBUG_PRINT(GREEN"Scheduled Job(%d)\n"RESET,target->priority);    
+    commErrchk(write(target->decision_fd,&ack,sizeof(int)));
 }
 
 void decision_handler(int target_pid, task_list_t *task_list){

@@ -46,9 +46,10 @@ void print_queue(char * name, queue_t * q);
 void check_registration(task_list_t *task_list, int reg_fd, resource_t *res);
 void do_register(task_list_t *task_list, reg_msg *msg);
 void deregister(task_list_t *task_list, reg_msg *msg, resource_t *res);
-void request_handler(task_list_t *task_list, task_info_t *task, resource_t *res, double current_time);    
+void request_handler(task_list_t *task_list, task_info_t *task, resource_t *res, resource_t*, double current_time);    
 void decision_handler(int target_pid, task_list_t *task_list);
-
+void init_decision_handler(int target_pid, task_list_t *task_list);
+int enqueue_backward(queue_t *q, int pid, int priority);
 
 int open_channel(char *pipe_name,int mode);
 void close_channel(char * pipe_name);

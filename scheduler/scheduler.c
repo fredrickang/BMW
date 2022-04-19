@@ -22,7 +22,7 @@
 
 int mmp2sch_fd = -1;
 int sch2mmp_fd = -1;
-
+FILE **fps;
 void del_arg(int argc, char **argv, int index)
 {
     int i;
@@ -45,24 +45,26 @@ int find_int_arg(int argc, char **argv, char *arg, int def)
     return def;
 }
 
-double what_time_is_it_now()
-{
-    struct timeval time;
-    if (gettimeofday(&time,NULL)){
-        return 0;
-    }
-    return (double)time.tv_sec + (double)time.tv_usec * .000001;
-}
-
 int main(int argc, char **argv){
     int sync = find_int_arg(argc, argv, "-sync", 0);
+    int init_sync = sync;
     set_priority(50); 
     set_affinity(0);
     
+
+    /* LOG */
+    fps = (FILE **)malloc(sizeof(FILE *)*sync);
+    char logname[300];
+    for(int i = 0; i < sync; i++){
+        snprintf(logname,100,"/home/xavier5/BMW/scheduler/logs/scheduler_%d.log",i+1);
+        fps[i] = fopen(logname, "a");
+    }
+
     task_list_t *task_list = create_task_list();
-    resource_t *gpu;
+    resource_t *gpu, *init_que;
     
     gpu = create_resource();
+    init_que = create_resource();
         
     int reg_fd = open_channel(REGISTRATION, O_RDONLY | O_NONBLOCK);
 
@@ -88,9 +90,15 @@ int main(int argc, char **argv){
 
             for(task = task_list ->head; task !=NULL; task = task -> next) 
                 if(FD_ISSET(task->request_fd, &readfds))
-                    request_handler(task_list, task, gpu, current_time);
+                    request_handler(task_list, task, gpu, init_que, current_time);
 
-            if(!(gpu->waiting->count < sync)){
+            if(!(init_que->waiting->count < init_sync)){
+                init_sync = 0;
+                if(init_que -> state == IDLE) target_pid = dequeue(init_que->waiting, current_time, init_que);
+                if(target_pid != -1) init_decision_handler(target_pid, task_list);
+            }
+
+            if( !(gpu->waiting->count < sync) && (init_que->waiting->count == 0)){
                 if(sync){
                     send_release_time(task_list,current_time);
                     sync = 0;
