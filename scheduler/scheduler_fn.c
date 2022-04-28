@@ -268,10 +268,12 @@ void check_registration(task_list_t *task_list, int reg_fd, resource_t *res){
     reg_msg * msg = (reg_msg *)malloc(sizeof(reg_msg));
         
     while( read(reg_fd, msg, REG_MSG_SIZE*sizeof(int)) > 0){
-        if(msg -> regist == 1) 
+        if(msg -> regist == 1) {
             do_register(task_list, msg); 
-        else 
+        }
+        else {
             deregister(task_list, msg, res);
+        }
     }
 }
 
@@ -304,9 +306,12 @@ void deregister(task_list_t *task_list, reg_msg *msg, resource_t *res){
     task_info_t *target = find_task_by_pid(task_list, msg -> pid);
     pid = target -> pid;
     close_channels(target);
+    write(target->decision_fd, &pid, sizeof(int));
+
+    /* LOG */
     fclose(fps[target->priority-1]);
+    
     de_register_task(task_list, target);
-        
     if (res-> pid == pid) res->state = IDLE;
 }
 
@@ -329,7 +334,7 @@ void request_handler(task_list_t *task_list, task_info_t *task, resource_t *res,
     
     if(res -> state == BUSY && res -> pid == task->pid){ /* Job termniation */
         DEBUG_PRINT(GREEN"Term Job(%d)\n"RESET,task->priority);
-        fprintf(fps[task->priority],"%f\n",(what_time_is_it_now() - res->scheduled));
+        fprintf(fps[task->priority-1],"%f\n",(what_time_is_it_now() - res->scheduled));
         res -> state = IDLE;
         res -> pid = -1;
     }
@@ -358,11 +363,14 @@ void decision_handler(int target_pid, task_list_t *task_list){
     sch_msg * msg = (sch_msg *)malloc(sizeof(sch_msg));
     msg->pid = target_pid;
     
+    double swap_s, swap_e;
+    swap_s = what_time_is_it_now();
     DEBUG_PRINT(GREEN"Check Swap(%d)\n"RESET,target->priority);
     commErrchk(write(sch2mmp_fd, msg, sizeof(int)*1));
     commErrchk(read(mmp2sch_fd, &ack, sizeof(int)));
     DEBUG_PRINT(GREEN"Swap Done(%d)\n"RESET,target->priority);
-
+    swap_e = what_time_is_it_now();
+    fprintf(fps[target->priority-1],"%f,",(swap_e- swap_s));
     DEBUG_PRINT(GREEN"Scheduled Job(%d)\n"RESET,target->priority);    
     commErrchk(write(target->decision_fd,&ack,sizeof(int)));
 }

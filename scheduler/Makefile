@@ -1,4 +1,4 @@
-DEBUG=1
+DEBUG=0
 
 CC=g++
 CFLAGS=-g -Wall -std=c++11

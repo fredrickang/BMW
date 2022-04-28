@@ -88,8 +88,12 @@ void check_registration(_proc_list *proc_list, int reg_fd){
     reg_msg * msg = (reg_msg *)malloc(sizeof(reg_msg));
     
     while(read(reg_fd, msg, sizeof(reg_msg))>0){
-        if(msg -> reg_type == 1) registration(proc_list, msg);
-        else de_registration(proc_list, msg);
+        if(msg -> reg_type == 1){
+            registration(proc_list, msg);
+        } 
+        else {
+            de_registration(proc_list, msg);
+        }
     }
 }
 
@@ -97,7 +101,9 @@ void de_registration(_proc_list* proc_list, reg_msg *msg){
 
     _proc * target = find_proc_by_pid(proc_list, msg -> pid);
     size_t used_memory_size = getmemorysize(*(target->m_entry));
-    
+    int ack;
+    write(target->decision_fd, &ack, sizeof(int));
+
     close_channels(msg->pid);
     de_register_proc(proc_list, target);
     

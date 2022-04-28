@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <time.h>
 
 #include <dlfcn.h>
 #include <fcntl.h>
@@ -23,6 +24,24 @@
 #include "hooklib.hpp"
 
 using namespace std;
+
+unsigned long long int swap_out_sz_tot = 0;
+unsigned long long int swap_in_sz_tot = 0;
+double swap_out_time = 0.0;
+double swap_in_time = 0.0;
+
+extern int prio;
+
+double what_time_is_it_now()
+{
+    struct timeval time;
+    if (gettimeofday(&time,NULL)){
+        return 0;
+    }
+    return (double)time.tv_sec + (double)time.tv_usec * .000001;
+}
+
+
 
 cudaError_t cudaMalloc(void **devPtr, size_t size){   
     cudaError_t err;
@@ -148,6 +167,8 @@ cublasStatus_t cublasSgemm(cublasHandle_t handle,
 
 /* Swap-in handler */
 void swapin(int signum){
+    double si_s, si_e;
+    si_s = what_time_is_it_now();
     DEBUG_PRINT(GREEN "Swap-in (SIGUSR2) handler callback\n" RESET);
     for(auto iter = swap_entry_list.begin(); iter != swap_entry_list.end(); iter++){
         int index = iter->first;
@@ -162,15 +183,20 @@ void swapin(int signum){
         /* page table update */
         DEBUG_PRINT(GREEN "Swap in Addr: %p, Size: %d\n" RESET, new_address, size);
         pagetable[old_address] = new_address;
+        swap_in_sz_tot += size;
     } 
     swap_entry_list.clear();
     DEBUG_PRINT_SWAP();
     DEBUG_PRINT_ENTRY();
     DEBUG_PRINT_PAGETABLE();
+    si_e = what_time_is_it_now();
+    swap_in_time += (si_e - si_s);
 }
 
 /* Swap out handler */
 void swapout(int signum){
+    double so_s, so_e;
+    so_s = what_time_is_it_now();
     DEBUG_PRINT(GREEN "Swap-out (SIGUSR1) handler callback\n" RESET);
 
     int ack;
@@ -196,10 +222,13 @@ void swapout(int signum){
             pagetable.erase(devPtr);
         }
         DEBUG_PRINT(GREEN "Swap out Addr: %p, Size: %d\n" RESET, devPtr, size);
+        swap_out_sz_tot += size;
     }
     DEBUG_PRINT_ENTRY();
     DEBUG_PRINT_SWAP();
     DEBUG_PRINT_PAGETABLE();
+    so_e = what_time_is_it_now();
+    swap_out_time += (so_e - so_s);
 }
 
 void* swapThread(void *vargsp){
@@ -396,17 +425,27 @@ int find_index_by_ptr(map<int,entry> *entry_list, void* ptr){
 
 void Cleanup(){
     DEBUG_PRINT(BLUE "Cleaning up...\n" RESET);
-    
+    int ack;
     reg_msg *reg = (reg_msg *)malloc(sizeof(reg_msg));
     reg->reg_type = 0;
     reg->pid = getpid();
     CHECK_COMM(write(register_fd, reg, sizeof(int)*2));
+    CHECK_COMM(read(decision_fd, &ack, sizeof(int)));
     DEBUG_PRINT(BLUE "==De-registration done==\n" RESET);
     
     //kill(0, SIGTERM);
     //pthread_join(swap_thread_id, NULL);
     DEBUG_PRINT(BLUE "Swap Thread terminated\n" RESET);
 
+    /* LOG */
+    // char logname[300];
+    // snprintf(logname, 300, "/home/xavier5/BMW/darknet/logs/swap_detail_log_%d.log",prio);
+    // FILE *fp = fopen(logname, "a");
+    // fprintf(fp, "swap_in_sz_tot: %lld\n", swap_in_sz_tot);
+    // fprintf(fp, "swap_out_sz_tot: %lld\n", swap_out_sz_tot);
+    // fprintf(fp, "swap_in_time: %f\n", swap_in_time);
+    // fprintf(fp, "swap_out_time: %f\n", swap_out_time);
+    // fclose(fp);
     DEBUG_PRINT(GREEN "==Termination Sequence Done==\n" RESET);
 }
 
@@ -436,9 +475,9 @@ cudaError_t cudaLaunchKernel( const void* func, dim3 gridDim, dim3 blockDim, voi
     cudaError_t err;
     if(pagetable.size() != 0){
         int arg_size = *(int *)args[0];
-        DEBUG_PRINT(RED"arg_size :%d\n"RESET,arg_size);
+        
         for(int i = 1; i < arg_size+1; i++){
-            DEBUG_PRINT(RED"%p", *(void **)args[i]);
+            
             if(pagetable.find(*(void **)args[i]) != pagetable.end()){
                 //fprintf(stderr, " -> %p", pagetable[*(void **)args[i]]);
                 args[i] = (void *)&pagetable[*(void **)args[i]];
