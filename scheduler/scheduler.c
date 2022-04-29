@@ -23,30 +23,10 @@
 int mmp2sch_fd = -1;
 int sch2mmp_fd = -1;
 FILE **fps;
-void del_arg(int argc, char **argv, int index)
-{
-    int i;
-    for(i = index; i < argc-1; ++i) argv[i] = argv[i+1];
-    argv[i] = 0;
-}
-
-int find_int_arg(int argc, char **argv, char *arg, int def)
-{
-    int i;
-    for(i = 0; i < argc-1; ++i){
-        if(!argv[i]) continue;
-        if(0==strcmp(argv[i], arg)){
-            def = atoi(argv[i+1]);
-            del_arg(argc, argv, i);
-            del_arg(argc, argv, i);
-            break;
-        }
-    }
-    return def;
-}
 
 int main(int argc, char **argv){
     int sync = find_int_arg(argc, argv, "-sync", 0);
+    char * logdir = find_char_arg(argc, argv, "-logdir", ".");
     int init_sync = sync;
     set_priority(50); 
     set_affinity(0);
@@ -56,7 +36,7 @@ int main(int argc, char **argv){
     fps = (FILE **)malloc(sizeof(FILE *)*sync);
     char logname[300];
     for(int i = 0; i < sync; i++){
-        snprintf(logname,100,"/home/xavier5/BMW/scheduler/logs/scheduler_%d.log",i+1);
+        snprintf(logname,100,"%s/scheduler/sch_%d.log",logdir, i+1);
         fps[i] = fopen(logname, "a");
     }
 

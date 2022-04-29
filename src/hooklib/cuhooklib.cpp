@@ -177,8 +177,8 @@ void swapin(int signum){
         void* old_address = iter->second.gpu_address;
         char* hostPtr = (char *)iter->second.cpu_address;
 
-        cudaMalloc(&new_address, size, index);
-        lcudaMemcpy(new_address, hostPtr, size, cudaMemcpyHostToDevice);
+        CHECK_CUDA(cudaMalloc(&new_address, size, index));
+        CHECK_CUDA(lcudaMemcpy(new_address, hostPtr, size, cudaMemcpyHostToDevice));
         free(hostPtr);
         /* page table update */
         DEBUG_PRINT(GREEN "Swap in Addr: %p, Size: %d\n" RESET, new_address, size);

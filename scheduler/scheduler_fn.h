@@ -56,4 +56,11 @@ void close_channel(char * pipe_name);
 void close_channels(task_info_t * task);
 int make_fdset(fd_set *readfds,int reg_fd, task_list_t *task_list);
 
+char *find_char_arg(int argc, char **argv, char *arg, char *def);
+int find_int_arg(int argc, char **argv, char *arg, int def);
+void del_arg(int argc, char **argv, int index);
+
+
+
+
 #endif

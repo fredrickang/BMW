@@ -18,16 +18,16 @@
 
 #define string(x) #x
 
-#define BLUE "\x1b[34m"  //info 
-#define GREEN "\x1b[32m" //highlight
-#define RED "\x1b[31m" // error
-#define RESET "\x1b[0m" 
+//#define BLUE "\x1b[34m"  //info 
+//#define GREEN "\x1b[32m" //highlight
+//#define RED "\x1b[31m" // error
+//#define RESET "\x1b[0m" 
 
 
-// #define BLUE  //info 
-// #define GREEN  //highlight
-// #define RED   // error
-// #define RESET  
+#define BLUE  //info 
+#define GREEN  //highlight
+#define RED   // error
+#define RESET  
 
 
 
