@@ -50,6 +50,7 @@ void request_handler(task_list_t *task_list, task_info_t *task, resource_t *res,
 void decision_handler(int target_pid, task_list_t *task_list);
 void init_decision_handler(int target_pid, task_list_t *task_list);
 int enqueue_backward(queue_t *q, int pid, int priority);
+int dequeue_backward(queue_t *q, double current_time, resource_t *res);
 
 int open_channel(char *pipe_name,int mode);
 void close_channel(char * pipe_name);
@@ -59,8 +60,5 @@ int make_fdset(fd_set *readfds,int reg_fd, task_list_t *task_list);
 char *find_char_arg(int argc, char **argv, char *arg, char *def);
 int find_int_arg(int argc, char **argv, char *arg, int def);
 void del_arg(int argc, char **argv, int index);
-
-
-
 
 #endif

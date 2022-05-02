@@ -32,7 +32,7 @@ inline void commAssert(int code, const char *file, int line){
 }
 
 #ifdef DEBUG
-#define DEBUG_PRINT(fmt, args...) fprintf(stderr, "[scheduler][%s:%3d:%20s()]: " fmt, \
+#define DEBUG_PRINT(fmt, args...) fprintf(stderr, "[scheduler][%s:%3d:%30s()]: " fmt, \
 __FILE__, __LINE__, __func__, ##args)
 #else
 #define DEBUG_PRINT(fmt, args...) 
@@ -233,7 +233,7 @@ int enqueue(queue_t *q, int pid, int priority){
 }
 
 int enqueue_backward(queue_t *q, int pid, int priority){
-    DEBUG_PRINT(BLUE"Enqueue Job(%d %d)\n"RESET,pid, priority);
+    DEBUG_PRINT(BLUE"Enqueue Init Job(%d %d)\n"RESET,pid, priority);
     node_t *tmp = new_node(pid, priority);
     q->count ++;    
     
@@ -243,7 +243,7 @@ int enqueue_backward(queue_t *q, int pid, int priority){
         return -1;
     }    
 
-    if(q->front -> priority < tmp-> priority ){
+    if(q->front -> priority < tmp-> priority){
         tmp->next = q->front;
         q->front = tmp;
     }
@@ -258,8 +258,6 @@ int enqueue_backward(queue_t *q, int pid, int priority){
     print_queue("WQ", q);
 }
 
-
-
 int dequeue(queue_t *q, double current_time, resource_t *res){
     if (q -> front == NULL){
         //DEBUG_PRINT(RED"Waiting Queue empty\n"RESET);
@@ -271,6 +269,38 @@ int dequeue(queue_t *q, double current_time, resource_t *res){
     DEBUG_PRINT(BLUE"Dequeue Job(%d %d)\n"RESET,target->pid, target->priority);
     q->front = target->next;
 
+    int target_pid = target->pid;
+
+    res -> state = BUSY;
+    res -> pid  = target_pid;  
+    res -> scheduled = what_time_is_it_now();
+    
+    q -> count --;
+    free(target);
+    print_queue("WQ", q);
+    return target_pid;
+}  
+
+int dequeue_backward(queue_t *q, double current_time, resource_t *res){
+    if (q -> front == NULL){
+        //DEBUG_PRINT(RED"Waiting Queue empty\n"RESET);
+        return -1;
+    }
+    
+    node_t *target = q->front;
+    node_t *prev = NULL;
+    while(target->next != NULL){
+        prev = target;
+        target = target->next;
+    }
+    if(prev == NULL){
+        q->front = NULL;
+    } 
+    else{
+        prev->next = NULL;
+    }
+    DEBUG_PRINT(BLUE"Dequeue Job(%d %d)\n"RESET,target->pid, target->priority);
+    
     int target_pid = target->pid;
 
     res -> state = BUSY;
@@ -361,7 +391,7 @@ void request_handler(task_list_t *task_list, task_info_t *task, resource_t *res,
     commErrchk(read(task -> request_fd, &ack, sizeof(int)*1));
     
     if(ack == 99){
-        enqueue_backward(init_que->waiting, task->pid, task->priority);
+        enqueue(init_que->waiting, task->pid, task->priority);
         return;
     }
     if(init_que -> state == BUSY && init_que -> pid == task -> pid){

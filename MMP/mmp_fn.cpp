@@ -102,13 +102,14 @@ void de_registration(_proc_list* proc_list, reg_msg *msg){
     _proc * target = find_proc_by_pid(proc_list, msg -> pid);
     size_t used_memory_size = getmemorysize(*(target->m_entry));
     int ack;
-    write(target->decision_fd, &ack, sizeof(int));
+    int fd = target->decision_fd;
 
     close_channels(msg->pid);
     de_register_proc(proc_list, target);
     
     mem_current -= used_memory_size;
-    
+    write(fd, &ack, sizeof(int));
+
     DEBUG_PRINT(GREEN"Freed memory useage : %f\n"RESET, (float) used_memory_size/giga::num);
     DEBUG_PRINT(GREEN"Current memory useage : %f\n"RESET, (float) mem_current/giga::num );
 }
@@ -186,6 +187,18 @@ cudaAPI request_handler(_proc_list * proc_list, _proc * proc){
 
     DEBUG_PRINT(GREEN"[REQEUST %d/%d] Index: %3d API: %15s Size: %5d\n"RESET, proc->id, proc->pid, msg->entry_index ,getcudaAPIString(msg->type), msg->size);
     
+    if(msg->type == _SWAPIN_){
+        DEBUG_PRINT(GREEN "[SWAP IN] Reqested: %d, Size: %d"RESET, proc->pid, msg->size);
+        if(mem_current + msg->size > MEM_LIMIT){
+            _proc* victim = choose_victim(proc_list, proc);
+            if(victim == NULL){
+                DEBUG_PRINT(RED"[Error] Victim not exist\n"RESET);
+                exit(-1);
+            }
+            swapout(proc_list, victim, msg->size);
+        }      
+    }
+
     if(msg->type == _Done_){
         DEBUG_PRINT(GREEN"Swap-in/out Done\n"RESET);
         return _Done_;
@@ -212,7 +225,6 @@ cudaAPI request_handler(_proc_list * proc_list, _proc * proc){
         mem_current -= proc->m_entry->at(msg->entry_index);
         /* Update entry*/
         proc->m_entry->erase(msg->entry_index);
-
     }    
     /* memory handling done! go do what ever you requested */
     int ack = 1;
@@ -229,7 +241,10 @@ _proc* choose_victim(_proc_list* proc_list, _proc* proc){
 
     int i = 0;
     for(_proc* tmp = proc_list->head; tmp != NULL; tmp = tmp->next){
-        if(tmp->id != proc->id) pid_list.push_back(tmp->pid);
+        if(tmp->id != proc->id) {
+            pid_list.push_back(tmp->pid);
+            
+        }
     }
 
     int victim_pid = pid_list.front();
@@ -284,6 +299,7 @@ void swapin(_proc_list * proc_list){
     int target_pid = msg->pid;
 
     _proc * proc = find_proc_by_pid(proc_list, target_pid);
+    
     kill(target_pid, SIGUSR2);
     cudaAPI ret;
     do{
@@ -332,6 +348,8 @@ char * getcudaAPIString(cudaAPI type){
             return string(_cudaFree_);
         case _Done_:
             return string(_Done_);
+        case _SWAPIN_:
+            return string(_SWAPIN_);
     }
 }
 

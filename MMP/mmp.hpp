@@ -13,7 +13,7 @@ using namespace std;
 #define SCH_MSG_SIZE 1
 
 typedef enum{
-    _cudaMalloc_, _cudaFree_, _Done_
+    _cudaMalloc_, _cudaFree_, _Done_, _SWAPIN_
 }cudaAPI;
 
 typedef struct _PROC_INFO{

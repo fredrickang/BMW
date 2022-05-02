@@ -50,7 +50,7 @@ inline void check_cuda(int code, const char *file, int line, bool abort=true){
 }
 
 #ifdef DEBUG
-#define DEBUG_PRINT(fmt, args...) fprintf(stderr, "[customHook][%s:%3d:%20s()]: [%d] " fmt, \
+#define DEBUG_PRINT(fmt, args...) fprintf(stderr, "[customHook][%s:%3d:%30s()]: [%d] " fmt, \
 __FILE__, __LINE__, __func__, gettid(), ##args)
 #else
 #define DEBUG_PRINT(fmt, args...)
@@ -91,7 +91,7 @@ int decision_fd = -1;
 int register_fd = -1;
 
 typedef enum{
-    _cudaMalloc_, _cudaFree_, _Done_
+    _cudaMalloc_, _cudaFree_, _Done_, _SWAPIN_
 }cudaAPI;
 
 typedef struct _MSG_PACKET_EVICT{

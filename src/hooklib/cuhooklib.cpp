@@ -30,8 +30,7 @@ unsigned long long int swap_in_sz_tot = 0;
 double swap_out_time = 0.0;
 double swap_in_time = 0.0;
 
-extern int prio;
-
+static unsigned long long int SWAPOUT_SIZE = 0;
 double what_time_is_it_now()
 {
     struct timeval time;
@@ -164,12 +163,18 @@ cublasStatus_t cublasSgemm(cublasHandle_t handle,
     return err;
 }
 
-
 /* Swap-in handler */
+// 1. find how much space is needed for swapin
+// 2. request space to MMP
+// 3. copy memory into device
+
 void swapin(int signum){
     double si_s, si_e;
     si_s = what_time_is_it_now();
     DEBUG_PRINT(GREEN "Swap-in (SIGUSR2) handler callback\n" RESET);
+    void *dummy;
+    SendRequest(dummy,_SWAPIN_,SWAPOUT_SIZE);
+    DEBUG_PRINT(GREEN"space reservation done\n"RESET);
     for(auto iter = swap_entry_list.begin(); iter != swap_entry_list.end(); iter++){
         int index = iter->first;
         size_t size = iter->second.size;
@@ -185,6 +190,7 @@ void swapin(int signum){
         pagetable[old_address] = new_address;
         swap_in_sz_tot += size;
     } 
+    SWAPOUT_SIZE = 0;
     swap_entry_list.clear();
     DEBUG_PRINT_SWAP();
     DEBUG_PRINT_ENTRY();
@@ -215,14 +221,16 @@ void swapout(int signum){
 
         CHECK_CUDA(lcudaMemcpy(hostPtr, devPtr, size, cudaMemcpyDeviceToHost));
         add_swap_entry(&swap_entry_list, index, devPtr, hostPtr, size);
-
+        SWAPOUT_SIZE += size;
         CHECK_CUDA(cudaFree(devPtr));
             
         if(pagetable.size() != 0){
             pagetable.erase(devPtr);
         }
         DEBUG_PRINT(GREEN "Swap out Addr: %p, Size: %d\n" RESET, devPtr, size);
+        /* LOG */
         swap_out_sz_tot += size;
+        
     }
     DEBUG_PRINT_ENTRY();
     DEBUG_PRINT_SWAP();
@@ -324,6 +332,7 @@ int SendRequest(void* devPtr, cudaAPI type, size_t size){
     
     if(type == _cudaMalloc_)  msg -> entry_index = entry_index;
     if(type == _cudaFree_)  msg -> entry_index = find_index_by_ptr(&gpu_entry_list, devPtr);
+    if(type == _SWAPIN_) msg -> entry_index = -1;
     
     CHECK_COMM(write(request_fd, msg, sizeof(int)*3));
     CHECK_COMM(read(decision_fd, &ack, sizeof(int)));

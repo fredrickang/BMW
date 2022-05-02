@@ -74,7 +74,7 @@ int main(int argc, char **argv){
 
             if(!(init_que->waiting->count < init_sync)){
                 init_sync = 0;
-                if(init_que -> state == IDLE) target_pid = dequeue(init_que->waiting, current_time, init_que);
+                if(init_que -> state == IDLE) target_pid = dequeue_backward(init_que->waiting, current_time, init_que);
                 if(target_pid != -1) init_decision_handler(target_pid, task_list);
             }
 
