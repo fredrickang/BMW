@@ -22,7 +22,7 @@
 extern int mmp2sch_fd;
 extern int sch2mmp_fd;
 
-static unsigned long long mem_current = 0;
+static size_t mem_current = 0;
 
 using namespace std;
 
@@ -88,12 +88,8 @@ void check_registration(_proc_list *proc_list, int reg_fd){
     reg_msg * msg = (reg_msg *)malloc(sizeof(reg_msg));
     
     while(read(reg_fd, msg, sizeof(reg_msg))>0){
-        if(msg -> reg_type == 1){
-            registration(proc_list, msg);
-        } 
-        else {
-            de_registration(proc_list, msg);
-        }
+        if(msg -> reg_type == 1) registration(proc_list, msg); 
+        else de_registration(proc_list, msg);
     }
 }
 
@@ -155,6 +151,7 @@ void registration(_proc_list* proc_list, reg_msg *msg){
     proc -> id = proc_list->count;
     proc -> pid = msg -> pid;
     proc -> m_entry = new map<int, size_t>();
+    proc -> scheduled_time = 0;
 
     DEBUG_PRINT(BLUE"Registration: [id] %d [pid] %d\n"RESET, proc->id, proc->pid);
 
@@ -183,20 +180,24 @@ void registration(_proc_list* proc_list, reg_msg *msg){
 cudaAPI request_handler(_proc_list * proc_list, _proc * proc){
     req_msg *msg = (req_msg *)malloc(sizeof(req_msg));
     
-    commErrchk(read(proc->request_fd, msg, sizeof(int)*REQ_MSG_SIZE));
+    commErrchk(read(proc->request_fd, msg, sizeof(req_msg)));
 
-    DEBUG_PRINT(GREEN"[REQEUST %d/%d] Index: %3d API: %15s Size: %5d\n"RESET, proc->id, proc->pid, msg->entry_index ,getcudaAPIString(msg->type), msg->size);
+    DEBUG_PRINT(GREEN"[REQEUST %d/%d] Index: %3d API: %15s Size: %lu\n"RESET, proc->id, proc->pid, msg->entry_index ,getcudaAPIString(msg->type), msg->size);
     
     if(msg->type == _SWAPIN_){
-        DEBUG_PRINT(GREEN "[SWAP IN] Reqested: %d, Size: %d"RESET, proc->pid, msg->size);
+        DEBUG_PRINT(GREEN "[SWAP IN] Reqested: %d, Size: %lu\n"RESET, proc->pid, msg->size);
         if(mem_current + msg->size > MEM_LIMIT){
-            _proc* victim = choose_victim(proc_list, proc);
-            if(victim == NULL){
-                DEBUG_PRINT(RED"[Error] Victim not exist\n"RESET);
-                exit(-1);
+            size_t should_swap_out = mem_current + msg->size - MEM_LIMIT;
+            size_t swap_outed = 0;
+            while(should_swap_out > swap_outed){
+                _proc * victim = choose_victim(proc_list, proc);
+                if(victim == NULL){
+                    DEBUG_PRINT(RED"[Error] Victim not exist\n"RESET);
+                    exit(-1);
+                }
+                swap_outed += swapout(proc_list, victim, (should_swap_out - swap_outed));
             }
-            swapout(proc_list, victim, msg->size);
-        }      
+        }
     }
 
     if(msg->type == _Done_){
@@ -204,19 +205,40 @@ cudaAPI request_handler(_proc_list * proc_list, _proc * proc){
         return _Done_;
     }
 
+    // if(msg->type == _cudaMalloc_){
+    //     /* Memory overflow handling */
+    //     if(mem_current + msg->size > MEM_LIMIT){
+    //         _proc* victim = choose_victim(proc_list, proc);
+    //         if(victim == NULL){
+    //             DEBUG_PRINT(RED"[Error] Victim not exist\n"RESET);
+    //             exit(-1);
+    //         }
+    //         swapout(proc_list, victim, msg->size);
+    //     }
+    //     /* Update entry */
+    //     proc->m_entry->insert(make_pair(msg->entry_index,msg->size));
+
+    //     /* Update memory status */
+    //     mem_current += msg->size;        
+    // }
+
+    
     if(msg->type == _cudaMalloc_){
         /* Memory overflow handling */
         if(mem_current + msg->size > MEM_LIMIT){
-            _proc* victim = choose_victim(proc_list, proc);
-            if(victim == NULL){
-                DEBUG_PRINT(RED"[Error] Victim not exist\n"RESET);
-                exit(-1);
+            size_t should_swap_out = mem_current + msg->size - MEM_LIMIT;
+            size_t swap_outed = 0;
+            while(should_swap_out > swap_outed){
+                _proc * victim = choose_victim(proc_list, proc);
+                if(victim == NULL){
+                    DEBUG_PRINT(RED"[Error] Victim not exist\n"RESET);
+                    exit(-1);
+                }
+                swap_outed += swapout(proc_list, victim, (should_swap_out - swap_outed));
             }
-            swapout(proc_list, victim, msg->size);
         }
         /* Update entry */
         proc->m_entry->insert(make_pair(msg->entry_index,msg->size));
-
         /* Update memory status */
         mem_current += msg->size;        
     }
@@ -232,43 +254,45 @@ cudaAPI request_handler(_proc_list * proc_list, _proc * proc){
     return msg->type;
 }
 
-//  victim selection policy
-//  Current policy: Random except request one
 _proc* choose_victim(_proc_list* proc_list, _proc* proc){
     _proc * victim;
-    list<int> pid_list;
     if(proc_list->count == 1) return NULL;
 
-    int i = 0;
+    double latest_proc_scheduled_time = -1;
+    int latest_proc_pid = -1;
+
     for(_proc* tmp = proc_list->head; tmp != NULL; tmp = tmp->next){
-        if(tmp->id != proc->id) {
-            pid_list.push_back(tmp->pid);
-            
+        if(tmp->scheduled_time >= latest_proc_scheduled_time && (getmemorysize(*(tmp->m_entry))!=0)){
+            latest_proc_scheduled_time = tmp->scheduled_time;
+            latest_proc_pid = tmp->pid;
         }
     }
+    
+    if (latest_proc_pid == -1) return NULL;
 
-    int victim_pid = pid_list.front();
-    victim = find_proc_by_pid(proc_list, victim_pid);
+    victim = find_proc_by_pid(proc_list, latest_proc_pid);
     return victim;
 }
 
 // Page eviction protocal 
 // Current policy: Greedy from oldest
-void swapout(_proc_list* proc_list, _proc* proc, size_t size){
+size_t swapout(_proc_list* proc_list, _proc* proc, size_t size){
     size_t evict_size = 0;
     list<int> evict_entry_list;
 
     // find evict pages
     auto iter  = proc->m_entry->begin();
-    while(iter != proc->m_entry->end() && (mem_current + size - evict_size > MEM_LIMIT)){
+    while(iter != proc->m_entry->end() && (evict_size <= size)){
         evict_entry_list.push_back(iter->first);
         evict_size += iter->second;
         ++iter;
     }
+    
     if(evict_entry_list.size() == 0){
         DEBUG_PRINT(RED"Victim(%d) has no pages to swap out\n"RESET, proc->pid);
         exit(-1);
     }
+
     // evict protocal
     // 1. wake the victim process
     // 2. send evict list
@@ -280,9 +304,9 @@ void swapout(_proc_list* proc_list, _proc* proc, size_t size){
     msg->start_idx = evict_entry_front;
     msg->end_idx = evict_entry_back;
 
-    DEBUG_PRINT(GREEN "[SWAP OUT] Victim: %d, Size: %d, Index: %d to %d\n" RESET, proc->pid, size, evict_entry_front, evict_entry_back);
+    DEBUG_PRINT(GREEN "[SWAP OUT] Victim: %d, Size: %lu, Index: %d to %d\n" RESET, proc->pid, evict_size, evict_entry_front, evict_entry_back);
 
-    commErrchk(write(proc->decision_fd, msg, sizeof(int)*EVI_MSG_SIZE));    
+    commErrchk(write(proc->decision_fd, msg, sizeof(evict_msg)));    
    
     kill(proc->pid, SIGUSR1);
 
@@ -290,11 +314,13 @@ void swapout(_proc_list* proc_list, _proc* proc, size_t size){
     do{
         ret = request_handler(proc_list, proc);
     }while(ret != _Done_);
+
+    return evict_size;
 }
 
 void swapin(_proc_list * proc_list){
     sch_msg *msg = (sch_msg *)malloc(sizeof(sch_msg));
-    commErrchk(read(sch2mmp_fd, msg, sizeof(int)*SCH_MSG_SIZE));
+    commErrchk(read(sch2mmp_fd, msg, sizeof(sch_msg)));
     
     int target_pid = msg->pid;
 
@@ -307,12 +333,13 @@ void swapin(_proc_list * proc_list){
     }while(ret != _Done_);
     
     // send to scheduler 
+    proc-> scheduled_time = what_time_is_it_now();
     int ack;
     commErrchk(write(mmp2sch_fd, &ack, sizeof(int)));
 }
 
-unsigned long long int getmemorysize(map<int,size_t> entry){
-    unsigned long long int total_size = 0;
+size_t getmemorysize(map<int,size_t> entry){
+    size_t total_size = 0;
     for(auto iter = entry.begin(); iter != entry.end(); iter++){
         total_size += iter->second;
     }

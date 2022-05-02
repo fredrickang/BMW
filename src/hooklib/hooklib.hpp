@@ -107,7 +107,7 @@ typedef struct _MSG_PACKET_REGIST{
 typedef struct _MSG_PACKET_REQUEST{
     cudaAPI type;
     int entry_index;
-    int size;
+    size_t size;
 }req_msg;
 
 

@@ -22,6 +22,7 @@ typedef struct _PROC_INFO{
     map<int,size_t> *m_entry;
     int request_fd;
     int decision_fd;
+    double scheduled_time;
     struct _PROC_INFO *next;
 }_proc;
 
@@ -38,7 +39,7 @@ typedef struct _MSG_PACKET_REGIST{
 typedef struct _MSG_PACKET_REQUEST{
     cudaAPI type; // Memory related function type (e.g. cudaMalloc, cudaMemcpy ...etc)
     int entry_index;
-    int size; // Memory request size
+    size_t size; // Memory request size
 }req_msg;
 
 typedef struct _MSG_PACKET_EVICT{
