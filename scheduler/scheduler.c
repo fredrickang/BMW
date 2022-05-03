@@ -48,9 +48,11 @@ int main(int argc, char **argv){
         
     int reg_fd = open_channel(REGISTRATION, O_RDONLY | O_NONBLOCK);
 
+#ifdef MMP
     mmp2sch_fd = open(MMP2SCH, O_RDONLY);
     sch2mmp_fd = open(SCH2MMP, O_WRONLY);
-    
+#endif
+
     double current_time;
     int target_pid;
     int fd_head;

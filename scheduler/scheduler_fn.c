@@ -434,10 +434,12 @@ void decision_handler(int target_pid, task_list_t *task_list){
     
     double swap_s, swap_e;
     swap_s = what_time_is_it_now();
+#ifdef MMP
     DEBUG_PRINT(GREEN"Check Swap(%d)\n"RESET,target->priority);
     commErrchk(write(sch2mmp_fd, msg, sizeof(int)*1));
     commErrchk(read(mmp2sch_fd, &ack, sizeof(int)));
     DEBUG_PRINT(GREEN"Swap Done(%d)\n"RESET,target->priority);
+#endif 
     swap_e = what_time_is_it_now();
     fprintf(fps[target->priority-1],"%f,",(swap_e- swap_s));
     DEBUG_PRINT(GREEN"Scheduled Job(%d)\n"RESET,target->priority);    

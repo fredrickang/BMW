@@ -452,14 +452,14 @@ void Cleanup(){
     DEBUG_PRINT(BLUE "Swap Thread terminated\n" RESET);
 
     /* LOG */
-    // char logname[300];
-    // snprintf(logname, 300, "/home/xavier5/BMW/darknet/logs/swap_detail_log_%d.log",prio);
-    // FILE *fp = fopen(logname, "a");
-    // fprintf(fp, "swap_in_sz_tot: %lld\n", swap_in_sz_tot);
-    // fprintf(fp, "swap_out_sz_tot: %lld\n", swap_out_sz_tot);
-    // fprintf(fp, "swap_in_time: %f\n", swap_in_time);
-    // fprintf(fp, "swap_out_time: %f\n", swap_out_time);
-    // fclose(fp);
+    char logname[300];
+    snprintf(logname, 300, "/home/xavier5/BMW/darknet/logs/swap_detail_log_%d.log",getpid());
+    FILE *fp = fopen(logname, "a");
+    fprintf(fp, "swap_in_sz_tot: %lld\n", swap_in_sz_tot);
+    fprintf(fp, "swap_out_sz_tot: %lld\n", swap_out_sz_tot);
+    fprintf(fp, "swap_in_time: %f\n", swap_in_time);
+    fprintf(fp, "swap_out_time: %f\n", swap_out_time);
+    fclose(fp);
     DEBUG_PRINT(GREEN "==Termination Sequence Done==\n" RESET);
 }
 
