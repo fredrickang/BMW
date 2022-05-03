@@ -1,0 +1,13 @@
+echo "xavier5" | sudo -S python3 pyscript.py --wMMP 0 --wSCH 1 --numtasks 1 --trials 10 
+echo "xavier5" | sudo -S python3 pyscript.py --wMMP 0 --wSCH 1 --numtasks 2 --trials 10 
+echo "xavier5" | sudo -S python3 pyscript.py --wMMP 0 --wSCH 1 --numtasks 3 --trials 10 
+echo "xavier5" | sudo -S python3 pyscript.py --wMMP 0 --wSCH 1 --numtasks 4 --trials 10 
+echo "xavier5" | sudo -S python3 pyscript.py --wMMP 1 --wSCH 1 --numtasks 1 --trials 10 
+echo "xavier5" | sudo -S python3 pyscript.py --wMMP 1 --wSCH 1 --numtasks 2 --trials 10 
+echo "xavier5" | sudo -S python3 pyscript.py --wMMP 1 --wSCH 1 --numtasks 3 --trials 10 
+echo "xavier5" | sudo -S python3 pyscript.py --wMMP 1 --wSCH 1 --numtasks 4 --trials 10 
+echo "xavier5" | sudo -S python3 pyscript.py --wMMP 1 --wSCH 1 --numtasks 5 --trials 10 
+echo "xavier5" | sudo -S python3 pyscript.py --wMMP 1 --wSCH 1 --numtasks 6 --trials 10 
+echo "xavier5" | sudo -S python3 pyscript.py --wMMP 1 --wSCH 1 --numtasks 7 --trials 10 
+echo "xavier5" | sudo -S python3 pyscript.py --wMMP 1 --wSCH 1 --numtasks 8 --trials 10 
+echo "xavier5" | sudo -S python3 pyscript.py --wMMP 1 --wSCH 1 --numtasks 9 --trials 10 
