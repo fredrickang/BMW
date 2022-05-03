@@ -1,4 +1,4 @@
-DEBUG=1
+DEBUG=0
 
 CFLAGS=-ldl -L/usr/local/cuda/lib64 -lcudart 
 

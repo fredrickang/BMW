@@ -8,7 +8,7 @@
 #define RED 
 #define RESET 
 
-#define DEBUG
+
 #ifdef DEBUG
 #define commErrchk(ans) {check_comm((ans), __FILE__, __LINE__);}
 inline void check_comm(int code, const char *file, int line, bool abort=true){
