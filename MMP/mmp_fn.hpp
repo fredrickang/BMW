@@ -1,7 +1,12 @@
-#define BLUE "\x1b[34m" 
-#define GREEN "\x1b[32m" 
-#define RED "\x1b[31m"
-#define RESET "\x1b[0m" 
+// #define BLUE "\x1b[34m" 
+// #define GREEN "\x1b[32m" 
+// #define RED "\x1b[31m"
+// #define RESET "\x1b[0m" 
+
+#define BLUE 
+#define GREEN 
+#define RED 
+#define RESET 
 
 #define DEBUG
 #ifdef DEBUG
@@ -45,6 +50,6 @@ char * getcudaAPIString(cudaAPI type);
 void close_channel(int pid, char * pipe_name);
 void close_channels(int pid);
 _proc* choose_victim(_proc_list* proc_list, _proc* proc);
-void swapout(_proc_list* proc_list, _proc* proc, size_t size);
+size_t swapout(_proc_list* proc_list, _proc* proc, size_t size);
 void swapin(_proc_list* proc_list);
-unsigned long long int getmemorysize(map<int,size_t> entry);
+size_t getmemorysize(map<int,size_t> entry);
