@@ -33,12 +33,14 @@ int main(int argc, char **argv){
     
 
     /* LOG */
+#ifdef LOG
     fps = (FILE **)malloc(sizeof(FILE *)*sync);
     char logname[300];
     for(int i = 0; i < sync; i++){
         snprintf(logname,100,"%s/scheduler/sch_%d.log",logdir, i+1);
         fps[i] = fopen(logname, "a");
     }
+#endif LOG
 
     task_list_t *task_list = create_task_list();
     resource_t *gpu, *init_que;

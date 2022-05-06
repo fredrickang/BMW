@@ -16,9 +16,9 @@
 
 #define string(x) #x
 //#define MEM_LIMIT 40000
-#define MEM_LIMIT 10737418240 // 10GB
+//#define MEM_LIMIT 10737418240 // 10GB
 //#define MEM_LIMIT 32212254720 // 30GB
-
+#define MEM_LIMIT 29000000000 
 extern int mmp2sch_fd;
 extern int sch2mmp_fd;
 

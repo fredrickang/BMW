@@ -4,7 +4,7 @@ OPENCV=0
 OPENMP=0
 DEBUG=0
 SCHEDULER=1
-LOG=1
+LOG=0
 
 ARCH= -gencode arch=compute_30,code=sm_30 \
       -gencode arch=compute_35,code=sm_35 \

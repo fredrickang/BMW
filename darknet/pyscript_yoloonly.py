@@ -138,29 +138,11 @@ if __name__ == "__main__":
             
             task_threads.append(Thread(target = dnn, args = args))
         
-        if opt.wMMP == 1:
-            mmp_thread = Thread(target = mmp, args=[exp_log_dir])
-        if opt.wSCH == 1 and opt.wMMP ==1:
-            scheduler_thread = Thread(target = scheduler, args = [opt.numtasks, exp_log_dir])
-        if opt.wSCH == 1 and opt.wMMP == 0:
-            scheduler_thread = Thread(target = scheduler_wo_mmp, args = [opt.numtasks, exp_log_dir])
         with open("/proc/sys/vm/drop_caches","w") as stream:
             stream.write("3\n")
         
-        if opt.wMMP == 1:
-            mmp_thread.start()
-        time.sleep(1)
-        if opt.wSCH == 1:    
-            scheduler_thread.start()
-        time.sleep(1)
         for thread in task_threads:
             thread.start()
         
         for thread in task_threads:
             thread.join()
-        
-        if opt.wSCH == 1:
-            scheduler_thread.join()
-
-        if opt.wMMP == 1:
-            mmp_thread.join()

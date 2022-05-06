@@ -378,8 +378,10 @@ void deregister(task_list_t *task_list, reg_msg *msg, resource_t *res){
     write(target->decision_fd, &pid, sizeof(int));
 
     /* LOG */
+#ifdef LOG
     fclose(fps[target->priority-1]);
-    
+#endif     
+
     de_register_task(task_list, target);
     if (res-> pid == pid) res->state = IDLE;
 }
@@ -396,14 +398,18 @@ void request_handler(task_list_t *task_list, task_info_t *task, resource_t *res,
     }
     if(init_que -> state == BUSY && init_que -> pid == task -> pid){
         DEBUG_PRINT(GREEN"Init done(%d)\n"RESET,task->priority);
+#ifdef LOG
         fprintf(fps[task->priority-1],"%f,",(what_time_is_it_now() - init_que->scheduled));
+#endif
         init_que -> state = IDLE;
         init_que -> pid = -1;
     }
     
     if(res -> state == BUSY && res -> pid == task->pid){ /* Job termniation */
         DEBUG_PRINT(GREEN"Term Job(%d)\n"RESET,task->priority);
+#ifdef LOG
         fprintf(fps[task->priority-1],"%f\n",(what_time_is_it_now() - res->scheduled));
+#endif 
         res -> state = IDLE;
         res -> pid = -1;
     }
@@ -441,7 +447,9 @@ void decision_handler(int target_pid, task_list_t *task_list){
     DEBUG_PRINT(GREEN"Swap Done(%d)\n"RESET,target->priority);
 #endif 
     swap_e = what_time_is_it_now();
+#ifdef LOG
     fprintf(fps[target->priority-1],"%f,",(swap_e- swap_s));
+#endif
     DEBUG_PRINT(GREEN"Scheduled Job(%d)\n"RESET,target->priority);    
     commErrchk(write(target->decision_fd,&ack,sizeof(int)));
 }

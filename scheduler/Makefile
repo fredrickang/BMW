@@ -1,5 +1,5 @@
-DEBUG=0
-
+DEBUG=1
+MMP=1
 CC=g++
 CFLAGS=-g -Wall -std=c++11
 OBJS=scheduler.o scheduler_fn.o
@@ -12,6 +12,11 @@ ifeq ($(DEBUG), 1)
 OPTS=-O0 -g
 CFLAGS+=-DDEBUG
 endif
+
+ifeq ($(MMP), 1)
+CFLAGS+=-DMMP
+endif
+
 
 CFLAGS+=$(OPTS)
 
