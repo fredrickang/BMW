@@ -1,5 +1,12 @@
-#ifndef SCHEDULER_H
-#define SCHEDULER_H
+
+#include <stdio.h>
+#include <iostream>
+#include <map>
+#include <list>
+#include <vector>
+#include <string>
+
+using namespace std;
 
 void del_arg(int argc, char **argv, int index);
 int find_int_arg(int argc, char **argv, char *arg, int def);
@@ -10,11 +17,20 @@ typedef enum{
     IDLE, BUSY, ALIVE, TERM, WARMUP
 }STATE;
 
+typedef enum{
+    _cudaMalloc_, _cudaFree_, _Done_, _SWAPIN_, _NotAPI_,
+}cudaAPI;
+
 typedef struct _TASK_INFO{
     int pid;
-    int request_fd;
-    int decision_fd;
+    int id;
+    int sch_req_fd;
+    int sch_dec_fd;
+    int mm_req_fd;
+    int mm_dec_fd;
     int priority;
+    double scheduled_time;
+    map<int,size_t> *m_entry;
     struct _TASK_INFO *next;
 }task_info_t;
 
@@ -51,4 +67,14 @@ typedef struct _MSG_PACKET_SCH{
     int pid;
 }sch_msg;
 
-#endif
+typedef struct _MSG_PACKET_REQUEST{
+    cudaAPI type;
+    int entry_index;
+    size_t size;
+}req_msg;
+
+typedef struct _MSG_PACKET_EVICT{
+    int start_idx;
+    int end_idx;
+}evict_msg;
+

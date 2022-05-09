@@ -88,7 +88,6 @@ static map<int,gswap> swap_entry_list;
 
 int request_fd = -1;
 int decision_fd = -1;
-int register_fd = -1;
 
 typedef enum{
     _cudaMalloc_, _cudaFree_, _Done_, _SWAPIN_

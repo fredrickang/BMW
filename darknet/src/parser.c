@@ -824,7 +824,8 @@ network *parse_network_cfg(char *filename)
     while( (request_fd = open(request, O_WRONLY)) < 0);
     while( (decision_fd = open(decision, O_RDONLY)) < 0);
     printf("==%d== comms open!\n",getpid());
-    
+    void *tmp;
+    cudaMalloc(&tmp, 1);
     int ack = 99;
     if( write(request_fd, &ack, sizeof(int)*1) == -1){
         perror("Request Send :");

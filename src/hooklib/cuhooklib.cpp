@@ -46,6 +46,7 @@ cudaError_t cudaMalloc(void **devPtr, size_t size){
     if(!init){
         Init();
         init = 1;
+        return cudaSuccess;
     }
 
     DEBUG_PRINT(BLUE "cudaMalloc [%d]\n" RESET, size);
@@ -294,24 +295,24 @@ void Init(){
     sigdelset(&sigsetmask_main, SIGINT);
     pthread_sigmask(SIG_SETMASK, &sigsetmask_main, NULL);
 
-    if((register_fd = open(REGISTRATION, O_WRONLY)) < 0){
-        DEBUG_PRINT(RED "REGISTRATION CHANNEL OPEN FAIL\n" RESET);
-        exit(-1);
-    }
+    // if((register_fd = open(REGISTRATION, O_WRONLY)) < 0){
+    //     DEBUG_PRINT(RED "REGISTRATION CHANNEL OPEN FAIL\n" RESET);
+    //     exit(-1);
+    // }
 
-    reg_msg *reg = (reg_msg *)malloc(sizeof(reg_msg));
-    reg->reg_type = 1;
-    reg->pid = getpid();
+    // reg_msg *reg = (reg_msg *)malloc(sizeof(reg_msg));
+    // reg->reg_type = 1;
+    // reg->pid = getpid();
 
-    CHECK_COMM(write(register_fd, reg, sizeof(reg_msg)))
+    // CHECK_COMM(write(register_fd, reg, sizeof(reg_msg)))
     
-    DEBUG_PRINT(BLUE "Registrated\n" RESET);
+    // DEBUG_PRINT(BLUE "Registrated\n" RESET);
 
     char request[30];
     char decision[30];
 
-    snprintf(request, 30, "/tmp/request_%d",getpid());
-    snprintf(decision, 30, "/tmp/decision_%d",getpid());
+    snprintf(request, 30, "/tmp/mm_request_%d",getpid());
+    snprintf(decision, 30, "/tmp/mm_decision_%d",getpid());
 
     while((request_fd = open(request,O_WRONLY)) < 0);
     while((decision_fd = open(decision,O_RDONLY)) < 0);
@@ -440,18 +441,13 @@ int find_index_by_ptr(map<int,entry> *entry_list, void* ptr){
 void Cleanup(){
     DEBUG_PRINT(BLUE "Cleaning up...\n" RESET);
     int ack;
-    reg_msg *reg = (reg_msg *)malloc(sizeof(reg_msg));
-    reg->reg_type = 0;
-    reg->pid = getpid();
-    CHECK_COMM(write(register_fd, reg, sizeof(reg_msg)));
-    CHECK_COMM(read(decision_fd, &ack, sizeof(int)));
     DEBUG_PRINT(BLUE "==De-registration done==\n" RESET);
     
     //kill(0, SIGTERM);
     //pthread_join(swap_thread_id, NULL);
     DEBUG_PRINT(BLUE "Swap Thread terminated\n" RESET);
-
     /* LOG */
+#ifdef LOG
     char logname[300];
     snprintf(logname, 300, "/home/xavier5/BMW/darknet/logs/swap_detail_log_%d.log",getpid());
     FILE *fp = fopen(logname, "a");
@@ -460,6 +456,7 @@ void Cleanup(){
     fprintf(fp, "swap_in_time: %f\n", swap_in_time);
     fprintf(fp, "swap_out_time: %f\n", swap_out_time);
     fclose(fp);
+#endif
     DEBUG_PRINT(GREEN "==Termination Sequence Done==\n" RESET);
 }
 

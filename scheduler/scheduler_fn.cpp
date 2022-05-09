@@ -9,34 +9,18 @@
 #include <time.h>
 #include <float.h>
 #include <math.h>
+#include <iostream>
+#include <chrono>
+#include "scheduler.hpp"
+#include "scheduler_fn.hpp"
 
-#include "scheduler_fn.h"
 
+#define MEM_LIMIT 10737418240
+#define string(x) #x
 
-#define REG_MSG_SIZE 3
+static size_t mem_current = 0;
 
-#define BLUE "\x1b[34m" //info
-#define GREEN "\x1b[32m" // highlight
-#define RED "\x1b[31m" // error
-#define RESET "\x1b[0m" 
-
-extern int mmp2sch_fd;
-extern int sch2mmp_fd;
-extern FILE **fps;
-#define commErrchk(ans) {commAssert((ans), __FILE__, __LINE__);}
-inline void commAssert(int code, const char *file, int line){
-    if(code < 0){
-        fprintf(stderr, RED"[scheduler][%s:%3d]: CommError: %d\n"RESET,file,line,code);
-        exit(code);
-    }
-}
-
-#ifdef DEBUG
-#define DEBUG_PRINT(fmt, args...) fprintf(stderr, "[scheduler][%s:%3d:%30s()]: " fmt, \
-__FILE__, __LINE__, __func__, ##args)
-#else
-#define DEBUG_PRINT(fmt, args...) 
-#endif
+using namespace std;
 
 void del_arg(int argc, char **argv, int index)
 {
@@ -179,6 +163,8 @@ void de_register_task(task_list_t *task_list, task_info_t *task){
     return;
 } 
 
+
+
 /* Resources */
 
 resource_t *create_resource(){
@@ -258,7 +244,7 @@ int enqueue_backward(queue_t *q, int pid, int priority){
     print_queue("WQ", q);
 }
 
-int dequeue(queue_t *q, double current_time, resource_t *res){
+int dequeue(queue_t *q, resource_t *res){
     if (q -> front == NULL){
         //DEBUG_PRINT(RED"Waiting Queue empty\n"RESET);
         return -1;
@@ -281,7 +267,7 @@ int dequeue(queue_t *q, double current_time, resource_t *res){
     return target_pid;
 }  
 
-int dequeue_backward(queue_t *q, double current_time, resource_t *res){
+int dequeue_backward(queue_t *q, resource_t *res){
     if (q -> front == NULL){
         //DEBUG_PRINT(RED"Waiting Queue empty\n"RESET);
         return -1;
@@ -313,12 +299,12 @@ int dequeue_backward(queue_t *q, double current_time, resource_t *res){
     return target_pid;
 }  
 
-void send_release_time(task_list_t *task_list, double current_time){
+void send_release_time(task_list_t *task_list){
     struct timespec release_time;
     clock_gettime(CLOCK_MONOTONIC, &release_time);
 
     for(task_info_t * node = task_list -> head ; node != NULL ; node = node -> next){
-        if(write(node->decision_fd, &release_time,sizeof(struct timespec)) < 0)
+        if(write(node->sch_dec_fd, &release_time,sizeof(struct timespec)) < 0)
             perror("decision_handler");  
     }
 }
@@ -336,33 +322,38 @@ task_info_t *find_task_by_pid(task_list_t *task_list, int pid){
 void check_registration(task_list_t *task_list, int reg_fd, resource_t *res){
     reg_msg * msg = (reg_msg *)malloc(sizeof(reg_msg));
         
-    while( read(reg_fd, msg, REG_MSG_SIZE*sizeof(int)) > 0){
-        if(msg -> regist == 1) {
-            do_register(task_list, msg); 
-        }
-        else {
-            deregister(task_list, msg, res);
-        }
+    while(read(reg_fd, msg, sizeof(reg_msg)) > 0){
+        if(msg -> regist == 1) do_register(task_list, msg); 
+        else deregister(task_list, msg, res);
     }
 }
 
 void do_register(task_list_t *task_list, reg_msg *msg){
     task_info_t *task = (task_info_t *)malloc(sizeof(task_info_t));
     task -> pid = msg -> pid;
+    task -> id = task_list->count;
     task -> priority = msg -> priority;
+    task -> m_entry = new map<int, size_t>();
+    task -> scheduled_time = 0;
 
     DEBUG_PRINT(BLUE"======== REGISTRATION ========\n"RESET);
     DEBUG_PRINT(BLUE"[PID]      %3d\n"RESET, task-> pid);
     DEBUG_PRINT(BLUE"[Priority] %3d\n"RESET, task->priority);
     
-    char req_fd_name[50];
-    char dec_fd_name[50];
+    char sch_req_fd_name[50];
+    char sch_dec_fd_name[50];
+    char mm_req_fd_name[50];
+    char mm_dec_fd_name[50];
 
-    snprintf(req_fd_name, 50,"/tmp/sch_request_%d",task->pid);
-    snprintf(dec_fd_name, 50,"/tmp/sch_decision_%d",task->pid);
+    snprintf(sch_req_fd_name, 50,"/tmp/sch_request_%d",task->pid);
+    snprintf(sch_dec_fd_name, 50,"/tmp/sch_decision_%d",task->pid);
+    snprintf(mm_req_fd_name, 50,"/tmp/mm_request_%d",task->pid);
+    snprintf(mm_dec_fd_name, 50,"/tmp/mm_decision_%d",task->pid);
 
-    task -> request_fd = open_channel(req_fd_name, O_RDONLY);
-    task -> decision_fd = open_channel(dec_fd_name, O_WRONLY);
+    task -> sch_req_fd = open_channel(sch_req_fd_name, O_RDONLY);
+    task -> sch_dec_fd = open_channel(sch_dec_fd_name, O_WRONLY);
+    task -> mm_req_fd = open_channel(mm_req_fd_name, O_RDONLY);
+    task -> mm_dec_fd = open_channel(mm_dec_fd_name, O_WRONLY);
     
     task -> next = NULL;
 
@@ -371,26 +362,32 @@ void do_register(task_list_t *task_list, reg_msg *msg){
 
 
 void deregister(task_list_t *task_list, reg_msg *msg, resource_t *res){
-    int pid;
+    
     task_info_t *target = find_task_by_pid(task_list, msg -> pid);
-    pid = target -> pid;
-    close_channels(target);
-    write(target->decision_fd, &pid, sizeof(int));
+    size_t used_memory_size = getmemorysize(*(target->m_entry));
+    int pid=target -> pid;
 
+    close_channels(target);
+    de_register_task(task_list, target);
+    
+    mem_current -= used_memory_size;
+    write(target->sch_dec_fd, &pid, sizeof(int));
+    
     /* LOG */
 #ifdef LOG
     fclose(fps[target->priority-1]);
 #endif     
 
-    de_register_task(task_list, target);
     if (res-> pid == pid) res->state = IDLE;
+    DEBUG_PRINT(GREEN"Freed memory useage : %f\n"RESET, (float) used_memory_size/giga::num);
+    DEBUG_PRINT(GREEN"Current memory useage : %f\n"RESET, (float) mem_current/giga::num );
 }
 
 // Request Handler //
 
-void request_handler(task_list_t *task_list, task_info_t *task, resource_t *res, resource_t *init_que, double current_time){    
+void sch_request_handler(task_list_t *task_list, task_info_t *task, resource_t *res, resource_t *init_que){    
     int ack;
-    commErrchk(read(task -> request_fd, &ack, sizeof(int)*1));
+    commErrchk(read(task -> sch_req_fd, &ack, sizeof(int)));
     
     if(ack == 99){
         enqueue(init_que->waiting, task->pid, task->priority);
@@ -417,8 +414,96 @@ void request_handler(task_list_t *task_list, task_info_t *task, resource_t *res,
         DEBUG_PRINT(GREEN"Release Job(%d)\n"RESET,task->priority);
         enqueue(res->waiting, task->pid, task->priority);
     }
-
 }
+
+cudaAPI mm_request_handler(task_list_t * proc_list, task_info_t * proc){
+    req_msg *msg = (req_msg *)malloc(sizeof(req_msg));
+    
+    commErrchk(read(proc->mm_req_fd, msg, sizeof(req_msg)));
+
+    DEBUG_PRINT(GREEN"[REQEUST %d/%d] Index: %3d API: %15s Size: %lu\n"RESET, proc->id, proc->pid, msg->entry_index ,getcudaAPIString(msg->type), msg->size);
+    
+    if(msg->type == _SWAPIN_){
+        DEBUG_PRINT(GREEN "[SWAP IN] Reqested: %d, Size: %lu\n"RESET, proc->pid, msg->size);
+        if(mem_current + msg->size > MEM_LIMIT){
+            size_t should_swap_out = mem_current + msg->size - MEM_LIMIT;
+            size_t swap_outed = 0;
+            while(should_swap_out > swap_outed){
+                task_info_t * victim = choose_victim(proc_list, proc);
+                if(victim == NULL){
+                    DEBUG_PRINT(RED"[Error] Victim not exist\n"RESET);
+                    exit(-1);
+                }
+                swap_outed += swapout(proc_list, victim, (should_swap_out - swap_outed));
+            }
+        }
+    }
+
+    if(msg->type == _Done_){
+        DEBUG_PRINT(GREEN"Swap-in/out Done\n"RESET);
+        return _Done_;
+    }
+
+    if(msg->type == _cudaMalloc_){
+        /* Memory overflow handling */
+        if(mem_current + msg->size > MEM_LIMIT){
+            size_t should_swap_out = mem_current + msg->size - MEM_LIMIT;
+            size_t swap_outed = 0;
+            while(should_swap_out > swap_outed){
+                task_info_t * victim = choose_victim(proc_list, proc);
+                if(victim == NULL){
+                    DEBUG_PRINT(RED"[Error] Victim not exist\n"RESET);
+                    exit(-1);
+                }
+                swap_outed += swapout(proc_list, victim, (should_swap_out - swap_outed));
+            }
+        }
+        /* Update entry */
+        proc->m_entry->insert(make_pair(msg->entry_index,msg->size));
+        /* Update memory status */
+        mem_current += msg->size;        
+    }
+
+    if(msg->type == _cudaFree_){
+        mem_current -= proc->m_entry->at(msg->entry_index);
+        /* Update entry*/
+        proc->m_entry->erase(msg->entry_index);
+    }    
+    /* memory handling done! go do what ever you requested */
+    int ack = 1;
+    commErrchk(write(proc->mm_dec_fd, &ack, sizeof(int)));
+    return msg->type;
+}
+
+task_info_t* choose_victim(task_list_t* proc_list, task_info_t* proc){
+    task_info_t * victim;
+    if(proc_list->count == 1) return NULL;
+
+    double latest_proc_scheduled_time = -1;
+    int latest_proc_pid = -1;
+
+    for(task_info_t* tmp = proc_list->head; tmp != NULL; tmp = tmp->next){
+        if(tmp->scheduled_time >= latest_proc_scheduled_time && (getmemorysize(*(tmp->m_entry))!=0) && tmp != proc){
+            latest_proc_scheduled_time = tmp->scheduled_time;
+            latest_proc_pid = tmp->pid;
+        }
+    }
+    
+    if (latest_proc_pid == -1) return NULL;
+
+    victim = find_task_by_pid(proc_list, latest_proc_pid);
+    return victim;
+}
+
+
+size_t getmemorysize(map<int,size_t> entry){
+    size_t total_size = 0;
+    for(auto iter = entry.begin(); iter != entry.end(); iter++){
+        total_size += iter->second;
+    }
+    return total_size;
+}
+
 
 void init_decision_handler(int target_pid, task_list_t *task_list){
 
@@ -426,7 +511,7 @@ void init_decision_handler(int target_pid, task_list_t *task_list){
     task_info_t *target = find_task_by_pid(task_list, target_pid);
 
     DEBUG_PRINT(GREEN"Scheduled Job(%d)\n"RESET,target->priority);    
-    commErrchk(write(target->decision_fd,&ack,sizeof(int)));
+    commErrchk(write(target->sch_dec_fd,&ack,sizeof(int)));
 }
 
 void decision_handler(int target_pid, task_list_t *task_list){
@@ -440,19 +525,35 @@ void decision_handler(int target_pid, task_list_t *task_list){
     
     double swap_s, swap_e;
     swap_s = what_time_is_it_now();
-#ifdef MMP
+
     DEBUG_PRINT(GREEN"Check Swap(%d)\n"RESET,target->priority);
-    commErrchk(write(sch2mmp_fd, msg, sizeof(int)*1));
-    commErrchk(read(mmp2sch_fd, &ack, sizeof(int)));
+    
+    swapin(task_list, target);
+
     DEBUG_PRINT(GREEN"Swap Done(%d)\n"RESET,target->priority);
-#endif 
+
     swap_e = what_time_is_it_now();
 #ifdef LOG
     fprintf(fps[target->priority-1],"%f,",(swap_e- swap_s));
 #endif
     DEBUG_PRINT(GREEN"Scheduled Job(%d)\n"RESET,target->priority);    
-    commErrchk(write(target->decision_fd,&ack,sizeof(int)));
+    commErrchk(write(target->sch_dec_fd ,&ack,sizeof(int)));
 }
+
+void swapin(task_list_t * task_list, task_info_t *target){    
+    int target_pid = target->pid;
+    kill(target_pid, SIGUSR2);
+    cudaAPI ret;
+    do{
+        ret = mm_request_handler(task_list, target);
+    }while(ret != _Done_);
+    
+    // send to scheduler 
+    target-> scheduled_time = what_time_is_it_now();
+    int ack;
+}
+
+
 
 ///// communication ////
 
@@ -483,31 +584,97 @@ void close_channel(char * pipe_name){
 }
 
 void close_channels(task_info_t * task){
-    char request_name[30];
-    char decision_name[30];
+    char sch_req_fd_name[50];
+    char sch_dec_fd_name[50];
+    char mm_req_fd_name[50];
+    char mm_dec_fd_name[50];
+
+    snprintf(sch_req_fd_name, 50,"/tmp/sch_request_%d",task->pid);
+    snprintf(sch_dec_fd_name, 50,"/tmp/sch_decision_%d",task->pid);
+    snprintf(mm_req_fd_name, 50,"/tmp/mm_request_%d",task->pid);
+    snprintf(mm_dec_fd_name, 50,"/tmp/mm_decision_%d",task->pid);
     
-    snprintf(request_name, 30, "/tmp/sch_request_%d", task->pid);
-    snprintf(decision_name, 30, "/tmp/sch_decision_%d", task->pid);
-    
-    close_channel(request_name);
-    close_channel(decision_name);
+    close_channel(sch_req_fd_name);
+    close_channel(sch_dec_fd_name);
+    close_channel(mm_req_fd_name);
+    close_channel(mm_dec_fd_name);
 }
 
-int make_fdset(fd_set *readfds,int reg_fd, task_list_t *task_list){
+int make_fdset(fd_set *readfds, int reg_fd, task_list_t *task_list){
+    int fd_head = 0;
     // initialize fd_set;
     FD_ZERO(readfds);
 
     // set register_fd
     FD_SET(reg_fd, readfds);
-        
+    if(reg_fd > fd_head) fd_head = reg_fd;
     // if there exist registered task, set
     if(task_list -> count > 0){
         task_info_t *node = task_list -> head;
         while(node != NULL){
-            FD_SET(node -> request_fd, readfds);
+            FD_SET(node -> sch_req_fd, readfds);
+            FD_SET(node -> mm_req_fd, readfds);
+            if(node -> sch_req_fd > fd_head) fd_head = node -> sch_req_fd;
+            if(node -> mm_req_fd > fd_head) fd_head = node -> mm_req_fd;
             node = node -> next;
         }
-        return task_list -> head ->request_fd;
     }
-    return reg_fd;
+    return fd_head;
+}
+
+
+size_t swapout(task_list_t* proc_list, task_info_t* proc, size_t size){
+    size_t evict_size = 0;
+    list<int> evict_entry_list;
+
+    // find evict pages
+    auto iter  = proc->m_entry->begin();
+    while(iter != proc->m_entry->end() && (evict_size <= size)){
+        evict_entry_list.push_back(iter->first);
+        evict_size += iter->second;
+        ++iter;
+    }
+    
+    if(evict_entry_list.size() == 0){
+        DEBUG_PRINT(RED"Victim(%d) has no pages to swap out\n"RESET, proc->pid);
+        exit(-1);
+    }
+
+    // evict protocal
+    // 1. wake the victim process
+    // 2. send evict list
+    int evict_entry_front = evict_entry_list.front();
+    int evict_entry_back = evict_entry_list.back();
+
+    int ack;
+    evict_msg * msg =(evict_msg *)malloc(sizeof(evict_msg));
+    msg->start_idx = evict_entry_front;
+    msg->end_idx = evict_entry_back;
+
+    DEBUG_PRINT(GREEN "[SWAP OUT] Victim: %d, Size: %lu, Index: %d to %d\n" RESET, proc->pid, evict_size, evict_entry_front, evict_entry_back);
+
+    commErrchk(write(proc->mm_dec_fd, msg, sizeof(evict_msg)));    
+   
+    kill(proc->pid, SIGUSR1);
+
+    cudaAPI ret;
+    do{
+        ret = mm_request_handler(proc_list, proc);
+    }while(ret != _Done_);
+
+    return evict_size;
+}
+
+
+char * getcudaAPIString(cudaAPI type){
+    switch (type){
+        case _cudaMalloc_:
+            return string(_cudaMalloc_);
+        case _cudaFree_:
+            return string(_cudaFree_);
+        case _Done_:
+            return string(_Done_);
+        case _SWAPIN_:
+            return string(_SWAPIN_);
+    }
 }

@@ -601,30 +601,31 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
         layer l = net->layers[net->n-1];
 
         float *X = sized.data;
-        
+        for(int i = 0; i < 10; i++){
         
 #ifdef LOG
-        double infer_s, infer_e;
-        infer_s = what_time_is_it_now();
-        network_predict(net, X);
-        infer_e = what_time_is_it_now();
-        fprintf(log_fp, "%f,", (infer_e - infer_s));
+            double infer_s, infer_e;
+            infer_s = what_time_is_it_now();
+            network_predict(net, X);
+            infer_e = what_time_is_it_now();
+            fprintf(log_fp, "%f,", (infer_e - infer_s));
 #else   
-        network_predict(net, X);
+            network_predict(net, X);
 #endif
+            
+            int nboxes = 0;
+            detection *dets = get_network_boxes(net, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes);
+            if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
+            draw_detections(im, dets, nboxes, thresh, names, alphabet, l.classes);
+            free_detections(dets, nboxes);
+            if(outfile){
+                save_image(im, outfile);
+            }
+            else{
+                save_image(im, "predictions");
+            }
         
-        int nboxes = 0;
-        detection *dets = get_network_boxes(net, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes);
-        if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
-        draw_detections(im, dets, nboxes, thresh, names, alphabet, l.classes);
-        free_detections(dets, nboxes);
-        if(outfile){
-            save_image(im, outfile);
         }
-        else{
-            save_image(im, "predictions");
-        }
-
         free_image(im);
         free_image(sized);
 #ifdef LOG

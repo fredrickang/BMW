@@ -57,7 +57,7 @@ double what_time_is_it_now()
     return (double)time.tv_sec + (double)time.tv_usec * .000001;
 }
 
-int make_fdset(fd_set *readfds,int reg_fd, _proc_list *proc_list, int swapin_fd){
+int make_fdset(fd_set *readfds, int reg_fd, _proc_list *proc_list, int swapin_fd){
     // initialize fd_set;
     FD_ZERO(readfds);
 

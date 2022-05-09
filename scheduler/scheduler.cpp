@@ -13,15 +13,11 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 
-#include "scheduler.h"
-#include "scheduler_fn.h"
+#include "scheduler.hpp"
+#include "scheduler_fn.hpp"
 
 #define REGISTRATION strdup("/tmp/scheduler")
-#define MMP2SCH strdup("/tmp/mmp2sch")
-#define SCH2MMP strdup("/tmp/sch2mmp")
 
-int mmp2sch_fd = -1;
-int sch2mmp_fd = -1;
 FILE **fps;
 
 int main(int argc, char **argv){
@@ -50,12 +46,6 @@ int main(int argc, char **argv){
         
     int reg_fd = open_channel(REGISTRATION, O_RDONLY | O_NONBLOCK);
 
-#ifdef MMP
-    mmp2sch_fd = open(MMP2SCH, O_RDONLY);
-    sch2mmp_fd = open(SCH2MMP, O_WRONLY);
-#endif
-
-    double current_time;
     int target_pid;
     int fd_head;
     fd_set readfds;
@@ -66,28 +56,30 @@ int main(int argc, char **argv){
 
         fd_head = make_fdset(&readfds, reg_fd, task_list);
     
-        if(select(fd_head +1, &readfds, NULL, NULL, NULL)){
-            current_time = what_time_is_it_now();
+        if(select(fd_head+1, &readfds, NULL, NULL, NULL)){
             if(FD_ISSET(reg_fd, &readfds)) {
                 check_registration(task_list, reg_fd, gpu);
             }
 
-            for(task = task_list ->head; task !=NULL; task = task -> next) 
-                if(FD_ISSET(task->request_fd, &readfds))
-                    request_handler(task_list, task, gpu, init_que, current_time);
+            for(task = task_list ->head; task !=NULL; task = task -> next){
+                if(FD_ISSET(task->sch_req_fd, &readfds))
+                    sch_request_handler(task_list, task, gpu, init_que);
+                if(FD_ISSET(task->mm_req_fd, &readfds))
+                    mm_request_handler(task_list, task);
+            }
 
             if(!(init_que->waiting->count < init_sync)){
                 init_sync = 0;
-                if(init_que -> state == IDLE) target_pid = dequeue_backward(init_que->waiting, current_time, init_que);
+                if(init_que -> state == IDLE) target_pid = dequeue_backward(init_que->waiting, init_que);
                 if(target_pid != -1) init_decision_handler(target_pid, task_list);
             }
 
             if( !(gpu->waiting->count < sync) && (init_que->waiting->count == 0)){
                 if(sync){
-                    send_release_time(task_list,current_time);
+                    send_release_time(task_list);
                     sync = 0;
                 }
-                if(gpu -> state == IDLE) target_pid = dequeue(gpu->waiting, current_time, gpu);
+                if(gpu -> state == IDLE) target_pid = dequeue(gpu->waiting, gpu);
                 if(target_pid != -1) decision_handler(target_pid, task_list);
             }
         }
