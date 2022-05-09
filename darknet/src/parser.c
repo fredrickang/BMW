@@ -49,7 +49,7 @@ int register_fd = -1;
 typedef struct _MSG_PACKET_REG{
     int regist;
     int pid;
-    int priority;
+    double period;
 }reg_msg;
 extern int Sync;
 extern char * logdir;
@@ -807,9 +807,9 @@ network *parse_network_cfg(char *filename)
     reg_msg * reg = (reg_msg *)malloc(sizeof(reg_msg));
     reg->regist = 1;
     reg->pid = getpid();
-    reg->priority = net->priority;
+    reg->period = net->period.tv_sec * 1000 + net->period.tv_nsec / 1000000;
 
-    if(write(register_fd, reg, REG_MSG_SIZE*sizeof(int)) < 0){
+    if(write(register_fd, reg, sizeof(reg_msg)) < 0){
         perror("Registrating : ");
         exit(-1);
     }

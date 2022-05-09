@@ -28,8 +28,9 @@ typedef struct _TASK_INFO{
     int sch_dec_fd;
     int mm_req_fd;
     int mm_dec_fd;
-    int priority;
     double scheduled_time;
+    double period;
+    double deadline;
     map<int,size_t> *m_entry;
     struct _TASK_INFO *next;
 }task_info_t;
@@ -41,7 +42,7 @@ typedef struct _TASK_LIST{
 
 typedef struct node{
     int pid;
-    int priority;
+    double deadline;
     struct node *next;
 }node_t;
 
@@ -53,7 +54,7 @@ typedef struct queue{
 typedef struct _MSG_PACKET{
     int regist;
     int pid;
-    int priority;
+    double period;
 }reg_msg;
 
 typedef struct _RESOURCE{

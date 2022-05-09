@@ -76,7 +76,7 @@ int main(int argc, char **argv){
 
             if( !(gpu->waiting->count < sync) && (init_que->waiting->count == 0)){
                 if(sync){
-                    send_release_time(task_list);
+                    send_release_time(task_list, gpu->waiting);
                     sync = 0;
                 }
                 if(gpu -> state == IDLE) target_pid = dequeue(gpu->waiting, gpu);

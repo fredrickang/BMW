@@ -22,6 +22,90 @@ static size_t mem_current = 0;
 
 using namespace std;
 
+node_t* SortedMerge(node_t* a, node_t* b);
+void FrontBackSplit(node_t* source,
+                    node_t** frontRef, node_t** backRef);
+ 
+/* sorts the linked list by changing next pointers (not data) */
+void MergeSort(node_t** headRef)
+{
+    node_t* head = *headRef;
+    node_t* a;
+    node_t* b;
+ 
+    /* Base case -- length 0 or 1 */
+    if ((head == NULL) || (head->next == NULL)) {
+        return;
+    }
+ 
+    /* Split head into 'a' and 'b' sublists */
+    FrontBackSplit(head, &a, &b);
+ 
+    /* Recursively sort the sublists */
+    MergeSort(&a);
+    MergeSort(&b);
+ 
+    /* answer = merge the two sorted lists together */
+    *headRef = SortedMerge(a, b);
+}
+ 
+/* See https:// www.geeksforgeeks.org/?p=3622 for details of this
+function */
+node_t* SortedMerge(node_t* a, node_t* b)
+{
+    node_t* result = NULL;
+ 
+    /* Base cases */
+    if (a == NULL)
+        return (b);
+    else if (b == NULL)
+        return (a);
+ 
+    /* Pick either a or b, and recur */
+    if (a->deadline <= b->deadline) {
+        result = a;
+        result->next = SortedMerge(a->next, b);
+    }
+    else {
+        result = b;
+        result->next = SortedMerge(a, b->next);
+    }
+    return (result);
+}
+ 
+/* UTILITY FUNCTIONS */
+/* Split the nodes of the given list into front and back halves,
+    and return the two lists using the reference parameters.
+    If the length is odd, the extra node should go in the front list.
+    Uses the fast/slow pointer strategy. */
+void FrontBackSplit(node_t* source,
+                    node_t** frontRef, node_t** backRef)
+{
+    node_t* fast;
+    node_t* slow;
+    slow = source;
+    fast = source->next;
+ 
+    /* Advance 'fast' two nodes, and advance 'slow' one node */
+    while (fast != NULL) {
+        fast = fast->next;
+        if (fast != NULL) {
+            slow = slow->next;
+            fast = fast->next;
+        }
+    }
+ 
+    /* 'slow' is before the midpoint in the list, so split it in two
+    at that point. */
+    *frontRef = source;
+    *backRef = slow->next;
+    slow->next = NULL;
+}
+ 
+
+
+
+
 void del_arg(int argc, char **argv, int index)
 {
     int i;
@@ -93,7 +177,7 @@ void print_list(char * name, task_list_t * task_list){
     DEBUG_PRINT(BLUE"%s : ", name);
     if (head == NULL) fprintf(stderr, "Nothing registered");
     while( head != NULL){
-        fprintf(stderr, "{[%d] %d} ", head->pid, head->priority);
+        fprintf(stderr, "{[%d] %f} ", head->pid, head->period);
         head = head->next;
     }
     fprintf(stderr,"\n"RESET);
@@ -106,7 +190,7 @@ void print_queue(char * name, queue_t * q){
         fprintf(stderr, "Empty Queue"); 
   
     while (head != NULL) { 
-        fprintf(stderr, "{[%d %d]} ", head -> pid, head->priority);
+        fprintf(stderr, "{[%d %f]} ", head -> pid, head->deadline);
         head = head->next; 
     }
     fprintf(stderr,"\n"RESET);
@@ -177,10 +261,10 @@ resource_t *create_resource(){
 
 /* Waiting Queue Things */
 
-node_t* new_node(int pid,int priority){
+node_t* new_node(int pid, double deadline){
     node_t *tmp = (node_t *)malloc(sizeof(node_t));
     tmp -> pid = pid;
-    tmp -> priority = priority;
+    tmp -> deadline = deadline;
     tmp -> next = NULL;
     return tmp;
 }
@@ -192,57 +276,56 @@ queue_t *create_queue(){
     return q; 
 }
 
-int enqueue(queue_t *q, int pid, int priority){
-    DEBUG_PRINT(BLUE"Enqueue Job(%d %d)\n"RESET,pid, priority);
-    node_t *tmp = new_node(pid, priority);
-    q->count ++;    
-    
+int enqueue(queue_t *q, int pid, double deadline){
+    DEBUG_PRINT(BLUE"Enqueue Job(%d %f)\n"RESET,pid, deadline);
+    node_t *tmp = new_node(pid, deadline);
+
+    q->count ++;
+
     if(q->front == NULL){
         q->front = tmp;
-        print_queue("WQ", q);
         return -1;
-    }    
+    }
 
-    if(q->front -> priority > tmp-> priority ){
-        tmp->next = q->front;
+    node_t * iter = q->front;
+    if(iter->deadline > tmp->deadline){
         q->front = tmp;
+        tmp->next = iter;
     }
-    else{
-        node_t *iter = q->front;
-        while(iter->next != NULL && iter->next->priority < tmp->priority){
-            iter = iter->next;
-        }
-        tmp->next = iter->next;
-        iter->next = tmp;
+    
+    while(iter->next != NULL && iter->next->deadline <= tmp->deadline){
+        iter = iter->next;
     }
+    tmp->next = iter->next;
+    iter->next = tmp;
     print_queue("WQ", q);
 }
 
-int enqueue_backward(queue_t *q, int pid, int priority){
-    DEBUG_PRINT(BLUE"Enqueue Init Job(%d %d)\n"RESET,pid, priority);
-    node_t *tmp = new_node(pid, priority);
-    q->count ++;    
+// int enqueue_backward(queue_t *q, int pid, int priority){
+//     DEBUG_PRINT(BLUE"Enqueue Init Job(%d %d)\n"RESET,pid, priority);
+//     node_t *tmp = new_node(pid, priority);
+//     q->count ++;    
     
-    if(q->front == NULL){
-        q->front = tmp;
-        print_queue("WQ", q);
-        return -1;
-    }    
+//     if(q->front == NULL){
+//         q->front = tmp;
+//         print_queue("WQ", q);
+//         return -1;
+//     }    
 
-    if(q->front -> priority < tmp-> priority){
-        tmp->next = q->front;
-        q->front = tmp;
-    }
-    else{
-        node_t *iter = q->front;
-        while(iter->next != NULL && iter->next->priority < tmp->priority){
-            iter = iter->next;
-        }
-        tmp->next = iter->next;
-        iter->next = tmp;
-    }
-    print_queue("WQ", q);
-}
+//     if(q->front -> priority < tmp-> priority){
+//         tmp->next = q->front;
+//         q->front = tmp;
+//     }
+//     else{
+//         node_t *iter = q->front;
+//         while(iter->next != NULL && iter->next->priority < tmp->priority){
+//             iter = iter->next;
+//         }
+//         tmp->next = iter->next;
+//         iter->next = tmp;
+//     }
+//     print_queue("WQ", q);
+// }
 
 int dequeue(queue_t *q, resource_t *res){
     if (q -> front == NULL){
@@ -252,7 +335,7 @@ int dequeue(queue_t *q, resource_t *res){
     
     node_t *target = q->front;
     
-    DEBUG_PRINT(BLUE"Dequeue Job(%d %d)\n"RESET,target->pid, target->priority);
+    DEBUG_PRINT(BLUE"Dequeue Job(%d %f)\n"RESET,target->pid, target->deadline);
     q->front = target->next;
 
     int target_pid = target->pid;
@@ -285,7 +368,7 @@ int dequeue_backward(queue_t *q, resource_t *res){
     else{
         prev->next = NULL;
     }
-    DEBUG_PRINT(BLUE"Dequeue Job(%d %d)\n"RESET,target->pid, target->priority);
+    DEBUG_PRINT(BLUE"Dequeue Job(%d %f)\n"RESET,target->pid, target->deadline);
     
     int target_pid = target->pid;
 
@@ -299,14 +382,27 @@ int dequeue_backward(queue_t *q, resource_t *res){
     return target_pid;
 }  
 
-void send_release_time(task_list_t *task_list){
+void update_deadline(task_info_t *task, double current_time){
+    double ms_period = task -> period * 0.001;
+    task -> deadline = current_time + ms_period;
+    DEBUG_PRINT(BLUE"Deadline update (%d %f)\n"RESET,task->pid, task->deadline);
+}
+
+void send_release_time(task_list_t *task_list, queue* waiting_queue){
     struct timespec release_time;
     clock_gettime(CLOCK_MONOTONIC, &release_time);
-
+    double current_time = what_time_is_it_now();
     for(task_info_t * node = task_list -> head ; node != NULL ; node = node -> next){
-        if(write(node->sch_dec_fd, &release_time,sizeof(struct timespec)) < 0)
+        update_deadline(node, current_time);
+        if(write(node->sch_dec_fd, &release_time, sizeof(struct timespec)) < 0)
             perror("decision_handler");  
     }
+    for(node_t * node = waiting_queue->front; node != NULL; node = node ->next){
+        task_info_t * target = find_task_by_pid(task_list, node->pid);
+        node->deadline = current_time + target->period * 0.001;
+    }
+    MergeSort(&waiting_queue->front);
+    print_queue("WQ", waiting_queue);
 }
 
 task_info_t *find_task_by_pid(task_list_t *task_list, int pid){
@@ -332,13 +428,13 @@ void do_register(task_list_t *task_list, reg_msg *msg){
     task_info_t *task = (task_info_t *)malloc(sizeof(task_info_t));
     task -> pid = msg -> pid;
     task -> id = task_list->count;
-    task -> priority = msg -> priority;
+    task -> period = msg -> period;
     task -> m_entry = new map<int, size_t>();
     task -> scheduled_time = 0;
 
     DEBUG_PRINT(BLUE"======== REGISTRATION ========\n"RESET);
     DEBUG_PRINT(BLUE"[PID]      %3d\n"RESET, task-> pid);
-    DEBUG_PRINT(BLUE"[Priority] %3d\n"RESET, task->priority);
+    DEBUG_PRINT(BLUE"[Period] %3f\n"RESET, task-> period);
     
     char sch_req_fd_name[50];
     char sch_dec_fd_name[50];
@@ -390,11 +486,11 @@ void sch_request_handler(task_list_t *task_list, task_info_t *task, resource_t *
     commErrchk(read(task -> sch_req_fd, &ack, sizeof(int)));
     
     if(ack == 99){
-        enqueue(init_que->waiting, task->pid, task->priority);
+        enqueue(init_que->waiting, task->pid, task->deadline);
         return;
     }
     if(init_que -> state == BUSY && init_que -> pid == task -> pid){
-        DEBUG_PRINT(GREEN"Init done(%d)\n"RESET,task->priority);
+        DEBUG_PRINT(GREEN"Init done(%d)\n"RESET,task->pid);
 #ifdef LOG
         fprintf(fps[task->priority-1],"%f,",(what_time_is_it_now() - init_que->scheduled));
 #endif
@@ -403,7 +499,7 @@ void sch_request_handler(task_list_t *task_list, task_info_t *task, resource_t *
     }
     
     if(res -> state == BUSY && res -> pid == task->pid){ /* Job termniation */
-        DEBUG_PRINT(GREEN"Term Job(%d)\n"RESET,task->priority);
+        DEBUG_PRINT(GREEN"Term Job(%d)\n"RESET,task->pid);
 #ifdef LOG
         fprintf(fps[task->priority-1],"%f\n",(what_time_is_it_now() - res->scheduled));
 #endif 
@@ -411,8 +507,10 @@ void sch_request_handler(task_list_t *task_list, task_info_t *task, resource_t *
         res -> pid = -1;
     }
     else{ /* Job release */
-        DEBUG_PRINT(GREEN"Release Job(%d)\n"RESET,task->priority);
-        enqueue(res->waiting, task->pid, task->priority);
+        double current_time = what_time_is_it_now();
+        update_deadline(task, current_time);
+        DEBUG_PRINT(GREEN"Release Job(%d)\n"RESET,task->pid);
+        enqueue(res->waiting, task->pid, task->deadline);
     }
 }
 
@@ -510,7 +608,7 @@ void init_decision_handler(int target_pid, task_list_t *task_list){
     int ack = 0;
     task_info_t *target = find_task_by_pid(task_list, target_pid);
 
-    DEBUG_PRINT(GREEN"Scheduled Job(%d)\n"RESET,target->priority);    
+    DEBUG_PRINT(GREEN"Scheduled Job(%d)\n"RESET,target->pid);    
     commErrchk(write(target->sch_dec_fd,&ack,sizeof(int)));
 }
 
@@ -526,17 +624,17 @@ void decision_handler(int target_pid, task_list_t *task_list){
     double swap_s, swap_e;
     swap_s = what_time_is_it_now();
 
-    DEBUG_PRINT(GREEN"Check Swap(%d)\n"RESET,target->priority);
+    DEBUG_PRINT(GREEN"Check Swap(%d)\n"RESET,target->pid);
     
     swapin(task_list, target);
 
-    DEBUG_PRINT(GREEN"Swap Done(%d)\n"RESET,target->priority);
+    DEBUG_PRINT(GREEN"Swap Done(%d)\n"RESET,target->pid);
 
     swap_e = what_time_is_it_now();
 #ifdef LOG
     fprintf(fps[target->priority-1],"%f,",(swap_e- swap_s));
 #endif
-    DEBUG_PRINT(GREEN"Scheduled Job(%d)\n"RESET,target->priority);    
+    DEBUG_PRINT(GREEN"Scheduled Job(%d)\n"RESET,target->pid);    
     commErrchk(write(target->sch_dec_fd ,&ack,sizeof(int)));
 }
 
