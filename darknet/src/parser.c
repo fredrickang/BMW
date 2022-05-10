@@ -40,6 +40,7 @@
 #ifdef SCHEDULER
 #include <fcntl.h>
 #include <unistd.h>
+#include <sched.h>
 #define REG_MSG_SIZE 3
 
 int request_fd = -1;
@@ -799,6 +800,11 @@ network *parse_network_cfg(char *filename)
     free_section(s);
 
 #ifdef SCHEDULER
+    struct sched_param prior;
+    memset(&prior, 0, sizeof(struct sched_param));
+    prior.sched_priority = 50;
+    if(sched_setscheduler(getpid(), SCHED_FIFO, &prior) == -1) perror("SCHED_FIFO :");
+
     if( (register_fd = open("/tmp/scheduler", O_WRONLY)) < 0){
         perror("Opening Registration channel");
         exit(-1);
@@ -813,7 +819,7 @@ network *parse_network_cfg(char *filename)
         perror("Registrating : ");
         exit(-1);
     }
-    printf("==%d== Registrated!\n",getpid());
+    fprintf(stderr, "==%d== Registrated!\n",getpid());
 
     char request[50];
     char decision[50];
@@ -823,7 +829,7 @@ network *parse_network_cfg(char *filename)
 
     while( (request_fd = open(request, O_WRONLY)) < 0);
     while( (decision_fd = open(decision, O_RDONLY)) < 0);
-    printf("==%d== comms open!\n",getpid());
+    fprintf(stderr, "==%d== comms open!\n",getpid());
     void *tmp;
     cudaMalloc(&tmp, 1);
     int ack = 99;

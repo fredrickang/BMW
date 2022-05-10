@@ -893,8 +893,9 @@ void forward_network_gpu(network *netp)
     fprintf(log_fp, "%f,", (input_e - input_s));
 #else
     cuda_push_array(net.input_gpu, net.input, net.inputs*net.batch);
+    // cuda_pull_array(net.input_gpu, net.input, net.inputs*net.batch);
+    // fprintf(stderr, "input: %f\n", checksum(net.input, net.inputs));
 #endif    
-
     if(net.truth){
         cuda_push_array(net.truth_gpu, net.truth, net.truths*net.batch);
     }
@@ -917,6 +918,8 @@ void forward_network_gpu(network *netp)
             net.truth_gpu = l.output_gpu;
             net.truth = l.output;
         }
+        // cuda_pull_array(l.output_gpu, l.output, l.outputs);
+        // fprintf(stderr,"layer(%d): %f\n", i, checksum(l.output, l.outputs));
     }
 #ifdef LOG
     core_e = what_time_is_it_now();

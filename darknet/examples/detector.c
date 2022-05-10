@@ -587,31 +587,34 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
     char *input = buff;
     float nms=.45;
     while(1){
-        if(filename){
-            strncpy(input, filename, 256);
-        } else {
-            printf("Enter Image Path: ");
-            fflush(stdout);
-            input = fgets(input, 256, stdin);
-            if(!input) return;
-            strtok(input, "\n");
-        }
-        image im = load_image_color(input,0,0);
-        image sized = letterbox_image(im, net->w, net->h);
-        layer l = net->layers[net->n-1];
+        for(int job = 0; job < 10; job++){
 
-        float *X = sized.data;
-        for(int i = 0; i < 10; i++){
-        
-#ifdef LOG
+            fprintf(stdout, "==== Job(%d %d) ====\n",getpid(), job);
+            if(filename){
+                strncpy(input, filename, 256);
+            } else {
+                printf("Enter Image Path: ");
+                fflush(stdout);
+                input = fgets(input, 256, stdin);
+                if(!input) return;
+                strtok(input, "\n");
+            }
+            image im = load_image_color(input,0,0);
+            image sized = letterbox_image(im, net->w, net->h);
+            layer l = net->layers[net->n-1];
+
+            float *X = sized.data;
+
+    #ifdef LOG
             double infer_s, infer_e;
             infer_s = what_time_is_it_now();
             network_predict(net, X);
             infer_e = what_time_is_it_now();
             fprintf(log_fp, "%f,", (infer_e - infer_s));
-#else   
+    #else   
+            
             network_predict(net, X);
-#endif
+    #endif
             
             int nboxes = 0;
             detection *dets = get_network_boxes(net, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes);
@@ -624,10 +627,10 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
             else{
                 save_image(im, "predictions");
             }
-        
+            
+            free_image(im);
+            free_image(sized);
         }
-        free_image(im);
-        free_image(sized);
 #ifdef LOG
         double free_s, free_e;
         free_s = what_time_is_it_now();

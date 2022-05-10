@@ -344,20 +344,38 @@ int get_yolo_detections(layer l, int w, int h, int netw, int neth, float thresh,
 
 #ifdef GPU
 
+float checksum2(float * input, int size){
+    int items = size/sizeof(float);
+    float sum = 0;
+    for(int i = 0; i < items; i++){
+        sum += input[i];
+    }
+    return sum;
+}
 void forward_yolo_layer_gpu(const layer l, network net)
 {
     copy_gpu(l.batch*l.inputs, net.input_gpu, 1, l.output_gpu, 1);
+    
+    // cuda_pull_array(l.output_gpu, l.output, l.outputs*l.batch);
+    // fprintf(stderr, "Yolo 1: %f\n", checksum2(l.output, l.outputs));
     int b, n;
     for (b = 0; b < l.batch; ++b){
         for(n = 0; n < l.n; ++n){
             int index = entry_index(l, b, n*l.w*l.h, 0);
             activate_array_gpu(l.output_gpu + index, 2*l.w*l.h, LOGISTIC);
+            // cuda_pull_array(l.output_gpu, l.output, l.outputs*l.batch);
+            // fprintf(stderr, "Yolo 2: %f\n", checksum2(l.output, l.outputs));
+
             index = entry_index(l, b, n*l.w*l.h, 4);
             activate_array_gpu(l.output_gpu + index, (1+l.classes)*l.w*l.h, LOGISTIC);
+            // cuda_pull_array(l.output_gpu, l.output, l.outputs*l.batch);   
+            // fprintf(stderr, "Yolo 3: %f\n", checksum2(l.output, l.outputs));
+
         }
     }
     if(!net.train || l.onlyforward){
         cuda_pull_array(l.output_gpu, l.output, l.batch*l.outputs);
+        // fprintf(stderr,"Yolo 4: %f\n", checksum(l.output, l.outputs));
         return;
     }
 

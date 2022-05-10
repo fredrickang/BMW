@@ -28,43 +28,6 @@ def scheduler(num_tasks, exp_log_dir):
     fp.write(stderr.decode('ascii'))
     fp.close()
 
-    
-# def scheduler_wo_mmp(num_tasks, exp_log_dir):
-#     command_line = []
-# #    command_line.append("gdb")
-# #    command_line.append("-ex=r")
-# #    command_line.append("--args")
-#     print("scheduler wo mmp")
-#     command_line.append("/home/xavier5/BMW/scheduler/scheduler_wo_mmp")
-#     command_line.append("-sync")
-#     command_line.append(str(num_tasks))
-#     command_line.append("-logdir")
-#     command_line.append(exp_log_dir)
-#     #sub = subprocess.Popen(command_line)
-    
-#     sub = subprocess.Popen(command_line, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-#     (stdout, stderr) = sub.communicate()
-#     log_path = os.path.join(exp_log_dir,"scheduler")
-#     fp = open(log_path+"/stderr.log",'w')
-#     fp.write(stderr.decode('ascii'))
-#     fp.close()
-
-
-# def mmp(exp_log_dir):
-#     command_line = []
-#     #command_line.append("gdb")
-#     #command_line.append("-ex=r")
-#     #command_line.append("--args")
-#     command_line.append("/home/xavier5/BMW/MMP/mmp")
-#     #sub = subprocess.Popen(command_line)
-    
-#     sub = subprocess.Popen(command_line, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-#     (stdout, stderr) = sub.communicate()
-#     log_path = os.path.join(exp_log_dir,"mmp")
-#     fp = open(log_path+"/stderr.log",'w')
-#     fp.write(stderr.decode('ascii'))
-#     fp.close()
-
 
 def dnn(prio, wMMP, exp_log_dir):
     prio = prio+1
@@ -87,8 +50,8 @@ def dnn(prio, wMMP, exp_log_dir):
 
     #sub = subprocess.Popen(command_line, env=env)
 
-    sub = subprocess.Popen(command_line, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    (stdout, stderr) = sub.communicate()
+    sub = subprocess.Popen(command_line, env=env, stderr=subprocess.PIPE)
+    stderr = sub.communicate()
     sub.wait()
     log_path = os.path.join(exp_log_dir,"darknet")
     fp = open(log_path+"/stderr_{:d}.log".format(prio),'w')
