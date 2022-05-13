@@ -51,7 +51,7 @@ def dnn(prio, wMMP, exp_log_dir):
     #sub = subprocess.Popen(command_line, env=env)
 
     sub = subprocess.Popen(command_line, env=env, stderr=subprocess.PIPE)
-    stderr = sub.communicate()
+    (stdout, stderr) = sub.communicate()
     sub.wait()
     log_path = os.path.join(exp_log_dir,"darknet")
     fp = open(log_path+"/stderr_{:d}.log".format(prio),'w')

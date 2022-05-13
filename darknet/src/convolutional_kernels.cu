@@ -13,7 +13,7 @@ extern "C" {
 #include "cuda.h"
 }
 
-__global__ void binarize_kernel(int nargs, float *x, int n, float *binary)
+__global__ void binarize_kernel(int nargs, int ptr_bit_0, int ptr_bit_1, int ptr_bit_2, float *x, int n, float *binary)
 {
     int i = (blockIdx.x + blockIdx.y*gridDim.x) * blockDim.x + threadIdx.x;
     if (i >= n) return;
@@ -22,11 +22,11 @@ __global__ void binarize_kernel(int nargs, float *x, int n, float *binary)
 
 void binarize_gpu(float *x, int n, float *binary)
 {
-    binarize_kernel<<<cuda_gridsize(n), BLOCK>>>(3, x, n, binary);
+    binarize_kernel<<<cuda_gridsize(n), BLOCK>>>(3, 1, 0, 1, x, n, binary);
     check_error(cudaPeekAtLastError());
 }
 
-__global__ void binarize_input_kernel(int nargs, float *input, int n, int size, float *binary)
+__global__ void binarize_input_kernel(int nargs, int ptr_bit_0, int ptr_bit_1, int ptr_bit_2, int ptr_bit_3, float *input, int n, int size, float *binary)
 {
     int s = (blockIdx.x + blockIdx.y*gridDim.x) * blockDim.x + threadIdx.x;
     if (s >= size) return;
@@ -43,12 +43,12 @@ __global__ void binarize_input_kernel(int nargs, float *input, int n, int size, 
 
 void binarize_input_gpu(float *input, int n, int size, float *binary)
 {
-    binarize_input_kernel<<<cuda_gridsize(size), BLOCK>>>(4, input, n, size, binary);
+    binarize_input_kernel<<<cuda_gridsize(size), BLOCK>>>(4, 1, 0, 0, 1, input, n, size, binary);
     check_error(cudaPeekAtLastError());
 }
 
 
-__global__ void binarize_weights_kernel(int nargs, float *weights, int n, int size, float *binary)
+__global__ void binarize_weights_kernel(int nargs, int ptr_bit_0, int ptr_bit_1, int ptr_bit_2, int ptr_bit_3, float *weights, int n, int size, float *binary)
 {
     int f = (blockIdx.x + blockIdx.y*gridDim.x) * blockDim.x + threadIdx.x;
     if (f >= n) return;
@@ -66,7 +66,7 @@ __global__ void binarize_weights_kernel(int nargs, float *weights, int n, int si
 
 void binarize_weights_gpu(float *weights, int n, int size, float *binary)
 {
-    binarize_weights_kernel<<<cuda_gridsize(n), BLOCK>>>(4, weights, n, size, binary);
+    binarize_weights_kernel<<<cuda_gridsize(n), BLOCK>>>(4, 1, 0, 0, 1, weights, n, size, binary);
     check_error(cudaPeekAtLastError());
 }
 
@@ -135,7 +135,7 @@ void forward_convolutional_layer_gpu(convolutional_layer l, network net)
     if(l.binary || l.xnor) swap_binary(&l);
 }
 
-__global__ void smooth_kernel(int nargs, float *x, int n, int w, int h, int c, int size, float rate, float *delta)
+__global__ void smooth_kernel(int nargs, int ptr_bit_0, int ptr_bit_1, int ptr_bit_2, int ptr_bit_3, int ptr_bit_4, int ptr_bit_5, int ptr_bit_6, int ptr_bit_7, float *x, int n, int w, int h, int c, int size, float rate, float *delta)
 {
     int id = (blockIdx.x + blockIdx.y*gridDim.x) * blockDim.x + threadIdx.x;
     if(id >= n) return;
@@ -173,7 +173,7 @@ extern "C" void smooth_layer(layer l, int size, float rate)
 
     size_t n = h*w*c*l.batch;
 
-    smooth_kernel<<<cuda_gridsize(n), BLOCK>>>(8, l.output_gpu, n, l.w, l.h, l.c, size, rate, l.delta_gpu);
+    smooth_kernel<<<cuda_gridsize(n), BLOCK>>>(8, 1, 0, 0, 0, 0, 0, 0, 1, l.output_gpu, n, l.w, l.h, l.c, size, rate, l.delta_gpu);
     check_error(cudaPeekAtLastError());
 }
 

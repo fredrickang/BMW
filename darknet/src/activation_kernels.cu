@@ -146,7 +146,7 @@ __device__ float gradient_kernel(float x, ACTIVATION a)
     return 0;
 }
 
-__global__ void binary_gradient_array_kernel(int nargs, float *x, float *dy, int n, int s, BINARY_ACTIVATION a, float *dx)
+__global__ void binary_gradient_array_kernel(int nargs, int ptr_bit_0, int ptr_bit_1, int ptr_bit_2, int ptr_bit_3, int ptr_bit_4, int ptr_bit_5, float *x, float *dy, int n, int s, BINARY_ACTIVATION a, float *dx)
 {
     int id = (blockIdx.x + blockIdx.y*gridDim.x) * blockDim.x + threadIdx.x;
     int i = id % s;
@@ -162,10 +162,10 @@ __global__ void binary_gradient_array_kernel(int nargs, float *x, float *dy, int
 
 extern "C" void binary_gradient_array_gpu(float *x, float *dx, int n, int size, BINARY_ACTIVATION a, float *y) 
 {
-    binary_gradient_array_kernel<<<cuda_gridsize(n/2), BLOCK>>>(6, x, dx, n/2, size, a, y);
+    binary_gradient_array_kernel<<<cuda_gridsize(n/2), BLOCK>>>(6, 1, 1, 0, 0, 0, 1, x, dx, n/2, size, a, y);
     check_error(cudaPeekAtLastError());
 }
-__global__ void binary_activate_array_kernel(int nargs, float *x, int n, int s, BINARY_ACTIVATION a, float *y)
+__global__ void binary_activate_array_kernel(int nargs, int ptr_bit_0, int ptr_bit_1, int ptr_bit_2, int ptr_bit_3, int ptr_bit_4, float *x, int n, int s, BINARY_ACTIVATION a, float *y)
 {
     int id = (blockIdx.x + blockIdx.y*gridDim.x) * blockDim.x + threadIdx.x;
     int i = id % s;
@@ -177,17 +177,17 @@ __global__ void binary_activate_array_kernel(int nargs, float *x, int n, int s, 
 
 extern "C" void binary_activate_array_gpu(float *x, int n, int size, BINARY_ACTIVATION a, float *y) 
 {
-    binary_activate_array_kernel<<<cuda_gridsize(n/2), BLOCK>>>(5, x, n/2, size, a, y);
+    binary_activate_array_kernel<<<cuda_gridsize(n/2), BLOCK>>>(5, 1, 0, 0, 0, 1, x, n/2, size, a, y);
     check_error(cudaPeekAtLastError());
 }
 
-__global__ void activate_array_kernel(int nargs, float *x, int n, ACTIVATION a)
+__global__ void activate_array_kernel(int nargs, int ptr_bit_0, int ptr_bit_1, int ptr_bit_2, float *x, int n, ACTIVATION a)
 {
     int i = (blockIdx.x + blockIdx.y*gridDim.x) * blockDim.x + threadIdx.x;
     if(i < n) x[i] = activate_kernel(x[i], a);
 }
 
-__global__ void gradient_array_kernel(int nargs, float *x, int n, ACTIVATION a, float *delta)
+__global__ void gradient_array_kernel(int nargs, int ptr_bit_0, int ptr_bit_1, int ptr_bit_2, int ptr_bit_3, float *x, int n, ACTIVATION a, float *delta)
 {
     int i = (blockIdx.x + blockIdx.y*gridDim.x) * blockDim.x + threadIdx.x;
     if(i < n) delta[i] *= gradient_kernel(x[i], a);
@@ -195,12 +195,12 @@ __global__ void gradient_array_kernel(int nargs, float *x, int n, ACTIVATION a, 
 
 extern "C" void activate_array_gpu(float *x, int n, ACTIVATION a) 
 {
-    activate_array_kernel<<<cuda_gridsize(n), BLOCK>>>(3, x, n, a);
+    activate_array_kernel<<<cuda_gridsize(n), BLOCK>>>(3, 1, 0, 0, x, n, a);
     check_error(cudaPeekAtLastError());
 }
 
 extern "C" void gradient_array_gpu(float *x, int n, ACTIVATION a, float *delta) 
 {
-    gradient_array_kernel<<<cuda_gridsize(n), BLOCK>>>(4, x, n, a, delta);
+    gradient_array_kernel<<<cuda_gridsize(n), BLOCK>>>(4, 1, 0, 0, 1, x, n, a, delta);
     check_error(cudaPeekAtLastError());
 }

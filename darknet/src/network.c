@@ -46,7 +46,7 @@ extern int request_fd, decision_fd, register_fd;
 #include "parser.h"
 #include "data.h"
 
-extern FILE *log_fp;
+
 
 
 load_args get_base_args(network *net)
@@ -63,83 +63,16 @@ load_args get_base_args(network *net)
     args.exposure = net->exposure;
     args.center = net->center;
     args.saturation = net->saturation;
-    args.hue = net->hue; 
+    args.hue = net->hue;
     return args;
 }
-#ifdef SCHEDULER
-
-
-int communicate(int ack){
-    int decision = 0; 
-    
-    if( write(request_fd, &ack, sizeof(int)*1) == -1){
-        perror("Request Send :");
-        exit(-1);
-    }
-    if(Sync){
-        release_time = (struct timespec *)malloc(sizeof(struct timespec));
-        if(read(decision_fd, release_time, sizeof(struct timespec))< 0){
-            perror("release time");
-        }
-        Sync = 0;
-    }
-
-    if(read(decision_fd, &decision, sizeof(int)*1) == -1){
-        perror("Decision Recv :");
-        exit(-1);
-    }
-    return decision;
-}
-
-void timespec_add (struct timespec *left,
-              const struct timespec *right)
-{
-  left->tv_sec = left->tv_sec + right->tv_sec;
-  left->tv_nsec = left->tv_nsec + right->tv_nsec;
-  while (left->tv_nsec >= 1000000000)
-    {
-      ++left->tv_sec;
-      left->tv_nsec -= 1000000000;
-    }
-}
-
-void deregistration(void){
-    typedef struct _MSG_PACKET_REG{
-        int regist;
-        int pid;
-        int priority;
-    }reg_msg;
-
-    reg_msg * dereg = (reg_msg *)malloc(sizeof(reg_msg));
-    dereg->regist = 0;
-    dereg->pid = getpid();
-    dereg->priority = 0;
-    int ack;
-    write(register_fd, dereg, sizeof(int)*REG_MSG_SIZE);
-    read(decision_fd, &ack, sizeof(int));
-    fprintf(stderr, "Scheduler deregistration done\n");
-}
-
-#endif
-
 
 network *load_network(char *cfg, char *weights, int clear)
 {
     network *net = parse_network_cfg(cfg);
-
-#ifdef LOG
-    double weight_s, weight_e;
-    weight_s = what_time_is_it_now();
     if(weights && weights[0] != 0){
         load_weights(net, weights);
     }
-    weight_e = what_time_is_it_now();
-    fprintf(log_fp, "%f,", (weight_e - weight_s));
-#else
-    if(weights && weights[0] !=0){
-        load_weights(net, weights);
-    }
-#endif
     if(clear) (*net->seen) = 0;
     return net;
 }
@@ -577,17 +510,65 @@ void top_predictions(network *net, int k, int *index)
     top_k(net->output, net->outputs, k, index);
 }
 
+#ifdef SCHEDULER
 
+
+int communicate(int ack){
+    int decision = 0; 
+    
+    if( write(request_fd, &ack, sizeof(int)*1) == -1){
+        perror("Request Send :");
+        exit(-1);
+    }
+    if(Sync){
+        release_time = (struct timespec *)malloc(sizeof(struct timespec));
+        if(read(decision_fd, release_time, sizeof(struct timespec))< 0){
+            perror("release time");
+        }
+        Sync = 0;
+    }
+
+    if(read(decision_fd, &decision, sizeof(int)*1) == -1){
+        perror("Decision Recv :");
+        exit(-1);
+    }
+    return decision;
+}
+
+void timespec_add (struct timespec *left,
+              const struct timespec *right)
+{
+  left->tv_sec = left->tv_sec + right->tv_sec;
+  left->tv_nsec = left->tv_nsec + right->tv_nsec;
+  while (left->tv_nsec >= 1000000000)
+    {
+      ++left->tv_sec;
+      left->tv_nsec -= 1000000000;
+    }
+}
+
+void deregistration(void){
+    typedef struct _MSG_PACKET_REG{
+        int regist;
+        int pid;
+        int priority;
+    }reg_msg;
+
+    reg_msg * dereg = (reg_msg *)malloc(sizeof(reg_msg));
+    dereg->regist = 0;
+    dereg->pid = getpid();
+    dereg->priority = 0;
+
+    write(register_fd, dereg, sizeof(int)*REG_MSG_SIZE);
+}
+
+#endif
 
 
 
 
 float *network_predict(network *net, float *input)
 {
-#ifdef LOG
-    double sched_s, sched_e;
-    sched_s = what_time_is_it_now();
-#endif
 #ifdef SCHEDULER
     atexit(deregistration);
     if(release_time != NULL){
@@ -595,10 +576,6 @@ float *network_predict(network *net, float *input)
         timespec_add(release_time, &net->period);
     }
     communicate(0);
-#endif
-#ifdef LOG
-    sched_e = what_time_is_it_now();
-    fprintf(log_fp, "%f,", (sched_e - sched_s));
 #endif
 
     network orig = *net;
@@ -666,13 +643,6 @@ void fill_network_boxes(network *net, int w, int h, float thresh, float hier, in
 
 detection *get_network_boxes(network *net, int w, int h, float thresh, float hier, int *map, int relative, int *num)
 {
-#ifdef SCHEDULER
-    int ack = 2;
-    if( write(request_fd, &ack, sizeof(int)*1) == -1){
-        perror("Request Send :");
-        exit(-1);
-    }
-#endif
     detection *dets = make_network_boxes(net, thresh, num);
     fill_network_boxes(net, w, h, thresh, hier, map, relative, dets);
     return dets;
@@ -827,6 +797,20 @@ float network_accuracy_multi(network *net, data d, int n)
 
 void free_network(network *net)
 {
+#ifdef SCHEDULER
+    typedef struct _MSG_PACKET_REG{
+        int regist;
+        int pid;
+        int priority;
+    }reg_msg;
+
+    reg_msg * dereg = (reg_msg *)malloc(sizeof(reg_msg));
+    dereg->regist = 0;
+    dereg->pid = getpid();
+    dereg->priority = 0;
+
+    write(register_fd, dereg, sizeof(int)*REG_MSG_SIZE);
+#endif
     int i;
     for(i = 0; i < net->n; ++i){
         free_layer(net->layers[i]);
@@ -869,41 +853,17 @@ float *network_output(network *net)
     return network_output_layer(net).output;
 }
 
-float checksum(float * input, int size){
-    int items = size/sizeof(float);
-    float sum = 0;
-    for(int i = 0; i < items; i++){
-        sum += input[i];
-    }
-    return sum;
-}
-
 #ifdef GPU
 
 void forward_network_gpu(network *netp)
 {
     network net = *netp;
     cuda_set_device(net.gpu_index);
-
-#ifdef LOG
-    double input_s, input_e;
-    input_s = what_time_is_it_now();
     cuda_push_array(net.input_gpu, net.input, net.inputs*net.batch);
-    input_e = what_time_is_it_now();
-    fprintf(log_fp, "%f,", (input_e - input_s));
-#else
-    cuda_push_array(net.input_gpu, net.input, net.inputs*net.batch);
-    // cuda_pull_array(net.input_gpu, net.input, net.inputs*net.batch);
-    // fprintf(stderr, "input: %f\n", checksum(net.input, net.inputs));
-#endif    
     if(net.truth){
         cuda_push_array(net.truth_gpu, net.truth, net.truths*net.batch);
     }
 
-#ifdef LOG
-    double core_s, core_e;
-    core_s = what_time_is_it_now();
-#endif
     int i;
     for(i = 0; i < net.n; ++i){
         net.index = i;
@@ -918,23 +878,8 @@ void forward_network_gpu(network *netp)
             net.truth_gpu = l.output_gpu;
             net.truth = l.output;
         }
-        // cuda_pull_array(l.output_gpu, l.output, l.outputs);
-        // fprintf(stderr,"layer(%d): %f\n", i, checksum(l.output, l.outputs));
     }
-#ifdef LOG
-    core_e = what_time_is_it_now();
-    fprintf(log_fp, "%f,", (core_e - core_s));
-#endif
-
-#ifdef LOG
-    double output_s, output_e;
-    output_s = what_time_is_it_now();
     pull_network_output(netp);
-    output_e = what_time_is_it_now();
-    fprintf(log_fp, "%f,", (output_e - output_s));
-#else
-    pull_network_output(netp);
-#endif
     calc_network_cost(netp);
 }
 

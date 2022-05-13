@@ -10,7 +10,7 @@ extern "C" {
 // src: https://github.com/BVLC/caffe/blob/master/src/caffe/util/im2col.cu
 // You may also want to read: https://github.com/BVLC/caffe/blob/master/LICENSE
 
-__global__ void col2im_gpu_kernel(int nargs, const int n, const float* data_col,
+__global__ void col2im_gpu_kernel(int nargs, int ptr_bit_0, int ptr_bit_1, int ptr_bit_2, int ptr_bit_3, int ptr_bit_4, int ptr_bit_5, int ptr_bit_6, int ptr_bit_7, int ptr_bit_8, int ptr_bit_9, const int n, const float* data_col,
         const int height, const int width, const int ksize,
         const int pad,
         const int stride,
@@ -50,7 +50,7 @@ void col2im_gpu(float *data_col,
     int width_col = (width + 2 * pad - ksize) / stride + 1;
     int num_kernels = channels * height * width;
     col2im_gpu_kernel<<<(num_kernels+BLOCK-1)/BLOCK,
-        BLOCK>>>(10, 
+        BLOCK>>>(10, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 
                 num_kernels, data_col, height, width, ksize, pad,
                 stride, height_col,
                 width_col, data_im);

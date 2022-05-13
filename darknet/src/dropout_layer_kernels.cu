@@ -8,7 +8,7 @@ extern "C" {
 #include "utils.h"
 }
 
-__global__ void yoloswag420blazeit360noscope(int nargs, float *input, int size, float *rand, float prob, float scale)
+__global__ void yoloswag420blazeit360noscope(int nargs, int ptr_bit_0, int ptr_bit_1, int ptr_bit_2, int ptr_bit_3, int ptr_bit_4, float *input, int size, float *rand, float prob, float scale)
 {
     int id = (blockIdx.x + blockIdx.y*gridDim.x) * blockDim.x + threadIdx.x;
     if(id < size) input[id] = (rand[id] < prob) ? 0 : input[id]*scale;
@@ -27,7 +27,7 @@ void forward_dropout_layer_gpu(dropout_layer layer, network net)
     cuda_push_array(layer.rand_gpu, layer.rand, size);
     */
 
-    yoloswag420blazeit360noscope<<<cuda_gridsize(size), BLOCK>>>(5, net.input_gpu, size, layer.rand_gpu, layer.probability, layer.scale);
+    yoloswag420blazeit360noscope<<<cuda_gridsize(size), BLOCK>>>(5, 1, 0, 1, 0, 0, net.input_gpu, size, layer.rand_gpu, layer.probability, layer.scale);
     check_error(cudaPeekAtLastError());
 }
 
@@ -36,6 +36,6 @@ void backward_dropout_layer_gpu(dropout_layer layer, network net)
     if(!net.delta_gpu) return;
     int size = layer.inputs*layer.batch;
 
-    yoloswag420blazeit360noscope<<<cuda_gridsize(size), BLOCK>>>(5, net.delta_gpu, size, layer.rand_gpu, layer.probability, layer.scale);
+    yoloswag420blazeit360noscope<<<cuda_gridsize(size), BLOCK>>>(5, 1, 0, 1, 0, 0, net.delta_gpu, size, layer.rand_gpu, layer.probability, layer.scale);
     check_error(cudaPeekAtLastError());
 }

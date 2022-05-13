@@ -95,7 +95,7 @@ __device__ float bilinear_interpolate_kernel(float *image, int w, int h, float x
     return val;
 }
 
-__global__ void levels_image_kernel(int nargs, float *image, float *rand, int batch, int w, int h, int train, float saturation, float exposure, float translate, float scale, float shift)
+__global__ void levels_image_kernel(int nargs, int ptr_bit_0, int ptr_bit_1, int ptr_bit_2, int ptr_bit_3, int ptr_bit_4, int ptr_bit_5, int ptr_bit_6, int ptr_bit_7, int ptr_bit_8, int ptr_bit_9, int ptr_bit_10, float *image, float *rand, int batch, int w, int h, int train, float saturation, float exposure, float translate, float scale, float shift)
 {
     int size = batch * w * h;
     int id = (blockIdx.x + blockIdx.y*gridDim.x) * blockDim.x + threadIdx.x;
@@ -136,7 +136,7 @@ __global__ void levels_image_kernel(int nargs, float *image, float *rand, int ba
     image[x + w*(y + h*2)] = rgb.z*scale + translate + (bshift - .5f)*shift;
 }
 
-__global__ void forward_crop_layer_kernel(int nargs, float *input, float *rand, int size, int c, int h, int w, int crop_height, int crop_width, int train, int flip, float angle, float *output)
+__global__ void forward_crop_layer_kernel(int nargs, int ptr_bit_0, int ptr_bit_1, int ptr_bit_2, int ptr_bit_3, int ptr_bit_4, int ptr_bit_5, int ptr_bit_6, int ptr_bit_7, int ptr_bit_8, int ptr_bit_9, int ptr_bit_10, int ptr_bit_11, float *input, float *rand, int size, int c, int h, int w, int crop_height, int crop_width, int train, int flip, float angle, float *output)
 {
     int id = (blockIdx.x + blockIdx.y*gridDim.x) * blockDim.x + threadIdx.x;
     if(id >= size) return;
@@ -195,12 +195,12 @@ extern "C" void forward_crop_layer_gpu(crop_layer layer, network net)
 
     int size = layer.batch * layer.w * layer.h;
 
-    levels_image_kernel<<<cuda_gridsize(size), BLOCK>>>(11, net.input_gpu, layer.rand_gpu, layer.batch, layer.w, layer.h, net.train, layer.saturation, layer.exposure, translate, scale, layer.shift);
+    levels_image_kernel<<<cuda_gridsize(size), BLOCK>>>(11, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, net.input_gpu, layer.rand_gpu, layer.batch, layer.w, layer.h, net.train, layer.saturation, layer.exposure, translate, scale, layer.shift);
     check_error(cudaPeekAtLastError());
 
     size = layer.batch*layer.c*layer.out_w*layer.out_h;
 
-    forward_crop_layer_kernel<<<cuda_gridsize(size), BLOCK>>>(12, net.input_gpu, layer.rand_gpu, size, layer.c, layer.h, layer.w, layer.out_h, layer.out_w, net.train, layer.flip, radians, layer.output_gpu);
+    forward_crop_layer_kernel<<<cuda_gridsize(size), BLOCK>>>(12, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, net.input_gpu, layer.rand_gpu, size, layer.c, layer.h, layer.w, layer.out_h, layer.out_w, net.train, layer.flip, radians, layer.output_gpu);
     check_error(cudaPeekAtLastError());
 
 /*

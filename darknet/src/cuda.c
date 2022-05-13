@@ -82,7 +82,7 @@ cublasHandle_t blas_handle()
     static cublasHandle_t handle[16];
     int i = cuda_get_device();
     if(!init[i]) {
-        cublasStatus_t err = cublasCreate(&handle[i]);
+        cublasCreate(&handle[i]);
         init[i] = 1;
     }
     return handle[i];
