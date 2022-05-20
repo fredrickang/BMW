@@ -255,7 +255,6 @@ void draw_detections(image im, detection *dets, int num, float thresh, char **na
                 printf("%s: %.0f%%\n", names[j], dets[i].prob[j]*100);
             }
         }
-        printf("end of detection results\n");
         if(class >= 0){
             int width = im.h * .006;
 

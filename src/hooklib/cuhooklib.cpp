@@ -18,6 +18,7 @@
 #include <map>
 #include <algorithm>
 #include <cassert>
+#include <climits>
 #include "cuda_runtime.h"
 #include "curand.h"
 #include "cublas_v2.h"
@@ -109,12 +110,16 @@ cudaError_t cudaMemcpy(void* dst, const void* src, size_t size, cudaMemcpyKind k
             if (pagetable.find(dst) != pagetable.end()) {
                 remapped_dst = pagetable[dst];
                 DEBUG_PRINT(RED "Re-directed %p -> %p\n" RESET, dst, remapped_dst);
+            }else{
+                remapped_dst = check_pointer_arithmetic(dst, __func__);
             }
         }else{
             if (pagetable.find((void *)src) != pagetable.end() ){
                 remapped_src = (const void*)pagetable[(void *)src];
                 DEBUG_PRINT(RED "Re-directed %p -> %p\n" RESET, src, remapped_src);
-            } 
+            }else{
+                remapped_src = (const void *)check_pointer_arithmetic((void *)src, __func__);
+            }
         }
     }
     cudaError_t err = cudaSuccess;
@@ -124,11 +129,11 @@ cudaError_t cudaMemcpy(void* dst, const void* src, size_t size, cudaMemcpyKind k
 
 cudaError_t cudaMemsetAsync(void* devPtr, int value, size_t count, cudaStream_t stream){
     void* remapped_dev = devPtr;
-    if(pagetable.size() != 0){
-        if(pagetable.find(devPtr) != pagetable.end()){
-            remapped_dev = pagetable[devPtr];
-            DEBUG_PRINT(RED "Re-directed %p -> %p\n" RESET, devPtr, remapped_dev);
-        }
+    if(pagetable.size() != 0 && pagetable.find(devPtr) != pagetable.end()){
+        remapped_dev = pagetable[devPtr];
+        DEBUG_PRINT(RED "Re-directed %p -> %p\n" RESET, devPtr, remapped_dev);
+    }else{
+        remapped_dev = check_pointer_arithmetic(devPtr, __func__);
     }
     cudaError_t err = cudaSuccess;
     CHECK_CUDA(lcudaMemsetAsync(remapped_dev, value, count, stream));
@@ -148,12 +153,18 @@ cublasStatus_t cublasSgemm(cublasHandle_t handle,
     if(pagetable.size() != 0){
         if(pagetable.find((void *)A) != pagetable.end()){
             remapped_A = pagetable[(void *)A];
+        }else{
+            remapped_A = check_pointer_arithmetic((void *)A, __func__);
         }
         if(pagetable.find((void *)B) != pagetable.end()){
             remapped_B = pagetable[(void *)B];
+        }else{
+            remapped_B = check_pointer_arithmetic((void *)B, __func__);
         }
         if(pagetable.find((void *)C) != pagetable.end()){
             remapped_C = pagetable[(void *)C];
+        }else{
+            remapped_C = check_pointer_arithmetic((void *)C, __func__);
         }
     }
 
@@ -161,6 +172,58 @@ cublasStatus_t cublasSgemm(cublasHandle_t handle,
     
     return err;
 }
+
+
+cudaError_t cudaLaunchKernel( const void* func, dim3 gridDim, dim3 blockDim, void** args, size_t sharedMem, cudaStream_t stream){
+    cudaError_t err;
+    if(pagetable.size() != 0){   
+        int arg_size = *(int *)args[0];
+
+        int index;
+        int pointer_bit[arg_size];
+        
+        
+        for (int i = 0; i < arg_size; i++){
+            index = i+1;
+            pointer_bit[i] = *(int *)args[index];
+        }
+     
+        for(int i = 0; i < arg_size; i++){
+            index = i + arg_size + 1;
+            if(pagetable.find(*(void **)args[index]) != pagetable.end()){
+                *(void **)args[index] = pagetable[*(void **)args[index]];
+            }
+            else{
+                if(pointer_bit[i] == 1){
+                    void * correct = check_pointer_arithmetic(*(void **)args[index], __func__);
+                    *(void **)args[index] = correct;
+                }
+            }
+        }
+    }
+
+    err = cudaSuccess;
+    CHECK_CUDA(lcudaLaunchKernel(func, gridDim, blockDim, args, sharedMem, stream));
+    return err;
+}
+
+int floorSearch(void * addr){
+    int floor_idx = -1;
+    unsigned long long int floor_dist = LLONG_MAX;
+
+    for(auto iter = gpu_entry_list.begin(); iter !=gpu_entry_list.end(); iter++){
+        int index = iter->first;
+        void * key = iter->second.address;
+        if(key < addr && floor_dist > ((char *)addr - (char *)key)){
+            floor_idx = index;
+            floor_dist = ((char *)addr - (char *)key);
+        }
+    }
+    return floor_idx;
+}
+
+
+
 
 /* Swap-in handler */
 // 1. find how much space is needed for swapin
@@ -179,16 +242,19 @@ void swapin(int signum){
         size_t size = iter->second.size;
         void* new_address;
         void* old_address = iter->second.gpu_address;
+        void* orig_address = iter->second.origin_address;
         char* hostPtr = (char *)iter->second.cpu_address;
 
         CHECK_CUDA(lcudaMalloc(&new_address, size));
         CHECK_CUDA(lcudaMemcpy(new_address, hostPtr, size, cudaMemcpyHostToDevice));
+
         SendRequest(old_address,_cudaMalloc_, size, index);
-        add_entry(&gpu_entry_list, index, old_address, size);
+        add_entry(&gpu_entry_list, index, orig_address, size);
+
         free(hostPtr);
         /* page table update */
         DEBUG_PRINT(GREEN "Swap in Addr: %p, Size: %d\n" RESET, new_address, size);
-        pagetable[old_address] = new_address;
+        pagetable[orig_address] = new_address;
         swap_in_sz_tot += size;
     } 
     SWAPOUT_SIZE = 0;
@@ -219,17 +285,20 @@ void swapout(int signum){
         size_t size = gpu_entry_list[index].size;
         void * oldaddress = gpu_entry_list[index].address;
         void * newaddress = oldaddress;
+
         if (pagetable.size() != 0 && pagetable.find(oldaddress)!=pagetable.end()){
             newaddress = pagetable[oldaddress];
         }
+        
         void * hostPtr = (char *)malloc(size);
-
         CHECK_CUDA(lcudaMemcpy(hostPtr, newaddress, size, cudaMemcpyDeviceToHost));
-        add_swap_entry(&swap_entry_list, index, newaddress, hostPtr, size);
+
+        add_swap_entry(&swap_entry_list, index, oldaddress, newaddress, hostPtr, size);
         SWAPOUT_SIZE += size;
         CHECK_CUDA(lcudaFree(newaddress));
         SendRequest(oldaddress, _cudaFree_, 0);
         del_entry(&gpu_entry_list, oldaddress);    
+        
         if(pagetable.size() != 0){
             pagetable.erase(oldaddress);
         }
@@ -327,6 +396,28 @@ void Init(){
     DEBUG_PRINT(GREEN "==Initialization Sequence Done==\n" RESET);
 }
 
+void Cleanup(){
+    DEBUG_PRINT(BLUE "Cleaning up...\n" RESET);
+    int ack;
+    DEBUG_PRINT(BLUE "==De-registration done==\n" RESET);
+    
+    //kill(0, SIGTERM);
+    //pthread_join(swap_thread_id, NULL);
+    DEBUG_PRINT(BLUE "Swap Thread terminated\n" RESET);
+    /* LOG */
+#ifdef LOG
+    char logname[300];
+    snprintf(logname, 300, "/home/xavier5/BMW/darknet/logs/swap_detail_log_%d.log",getpid());
+    FILE *fp = fopen(logname, "a");
+    fprintf(fp, "swap_in_sz_tot: %lld\n", swap_in_sz_tot);
+    fprintf(fp, "swap_out_sz_tot: %lld\n", swap_out_sz_tot);
+    fprintf(fp, "swap_in_time: %f\n", swap_in_time);
+    fprintf(fp, "swap_out_time: %f\n", swap_out_time);
+    fclose(fp);
+#endif
+    DEBUG_PRINT(GREEN "==Termination Sequence Done==\n" RESET);
+}
+
 int SendRequest(void* devPtr, cudaAPI type, size_t size){
     DEBUG_PRINT_ENTRY();
     
@@ -343,6 +434,7 @@ int SendRequest(void* devPtr, cudaAPI type, size_t size){
     CHECK_COMM(write(request_fd, msg, sizeof(req_msg)));
     CHECK_COMM(read(decision_fd, &ack, sizeof(int)));
 }
+
 int SendRequest(void* devPtr, cudaAPI type, size_t size, int index){
     DEBUG_PRINT_ENTRY();
     
@@ -409,6 +501,16 @@ void DEBUG_PRINT_PAGETABLE(){
 #endif
 
 
+float checksum(float * input, int size){
+    int items = size/sizeof(float);
+    float sum = 0;
+    for(int i = 0; i < items; i++){
+        sum += input[i];
+    }
+    return sum;
+}
+
+
 void add_entry(map<int,entry> *entry_list, int index, void* devPtr, size_t size){
     DEBUG_PRINT(BLUE "Add: {%d, [%p, %d]}\n" RESET, index, devPtr, size);
     entry tmp;
@@ -437,34 +539,20 @@ int find_index_by_ptr(map<int,entry> *entry_list, void* ptr){
     return iter->first;
 }
 
-
-void Cleanup(){
-    DEBUG_PRINT(BLUE "Cleaning up...\n" RESET);
-    int ack;
-    DEBUG_PRINT(BLUE "==De-registration done==\n" RESET);
-    
-    //kill(0, SIGTERM);
-    //pthread_join(swap_thread_id, NULL);
-    DEBUG_PRINT(BLUE "Swap Thread terminated\n" RESET);
-    /* LOG */
-#ifdef LOG
-    char logname[300];
-    snprintf(logname, 300, "/home/xavier5/BMW/darknet/logs/swap_detail_log_%d.log",getpid());
-    FILE *fp = fopen(logname, "a");
-    fprintf(fp, "swap_in_sz_tot: %lld\n", swap_in_sz_tot);
-    fprintf(fp, "swap_out_sz_tot: %lld\n", swap_out_sz_tot);
-    fprintf(fp, "swap_in_time: %f\n", swap_in_time);
-    fprintf(fp, "swap_out_time: %f\n", swap_out_time);
-    fclose(fp);
-#endif
-    DEBUG_PRINT(GREEN "==Termination Sequence Done==\n" RESET);
+bool exist_in_entry(map<int,entry> *entry_list, void *ptr){
+    auto iter = (*entry_list).begin();
+    while(iter != (*entry_list).end() && iter->second.address != ptr){
+        ++ iter;
+    }
+    if (iter == (*entry_list).end() && iter->second.address != ptr) return false;
+    return true;
 }
 
 
-
-void add_swap_entry(map<int,gswap>* entry_list, int index, void* gpuPtr, void* cpuPtr, size_t size){
-    DEBUG_PRINT(BLUE "Add (Swap): {%d, [%p, %p, %lu]}\n" RESET, index, gpuPtr, cpuPtr, size);
+void add_swap_entry(map<int,gswap>* entry_list, int index, void* origPrt, void* gpuPtr, void* cpuPtr, size_t size){
+    DEBUG_PRINT(BLUE "Add (Swap): {%d, [%p, %p, %p, %lu]}\n" RESET, index, origPrt, gpuPtr, cpuPtr, size);
     gswap tmp;
+    tmp.origin_address = origPrt;
     tmp.gpu_address = gpuPtr;
     tmp.cpu_address = cpuPtr;
     tmp.size = size;
@@ -481,90 +569,18 @@ char * getcudaAPIString(cudaAPI type){
 }
 
 
-
-cudaError_t cudaLaunchKernel( const void* func, dim3 gridDim, dim3 blockDim, void** args, size_t sharedMem, cudaStream_t stream){
-    cudaError_t err;
-    if(pagetable.size() != 0){
-        int arg_size = *(int *)args[0];
-        
-        for(int i = 1; i < arg_size+1; i++){
-            
-            if(pagetable.find(*(void **)args[i]) != pagetable.end()){
-                //fprintf(stderr, " -> %p", pagetable[*(void **)args[i]]);
-                args[i] = (void *)&pagetable[*(void **)args[i]];
+void * check_pointer_arithmetic(void *devPtr, const char* func_name){
+    void *retPtr = devPtr;
+    int closest_idx = floorSearch(devPtr);
+    if(!exist_in_entry(&gpu_entry_list, devPtr) && closest_idx != -1){
+        void * base_pointer = gpu_entry_list[closest_idx].address;
+        if(pagetable.find(base_pointer) != pagetable.end()){
+            size_t dist = (char *)devPtr - (char *)base_pointer;
+            if(dist < gpu_entry_list[closest_idx].size){                    
+                void * corrected = (char *)pagetable[base_pointer] + dist;
+                retPtr = (void *)corrected;
             }
-            //fprintf(stderr,"\n"RESET); 
         }
     }
-    err = cudaSuccess;
-    CHECK_CUDA(lcudaLaunchKernel(func, gridDim, blockDim, args, sharedMem, stream));
-    return err;
+    return retPtr;
 }
-
-// static int possible_arg_sizes[] = {1,2,4,8,12};
-// static int num_arg_size = 5;
-// // bool is_arg_size(int diff){
-// //     for(int i = 0; i < num_arg_size; i++){
-// //         if(possible_arg_sizes[i] == diff) return true;
-// //     }
-// //     return false;
-// // }
-// bool is_arg_size(int diff){
-//     if(diff > 100 || diff < -100) return false;
-//     return true;
-// }
-
-
-/* cudaLaunchKernel with assuming the number of args (deprecated)*/
-// cudaError_t cudaLaunchKernel(const void* func, dim3 gridDim, dim3 blockDim, void** args, size_t sharedMem, cudaStream_t stream){
-//     cudaError_t err;
-//     if(pagetable.size() != 0){
-//         void * zero_args = (void *)0x100000001;
-//         DEBUG_PRINT("cudaLaunchKernel\n");
-//         if(args[0] != zero_args){
-//             int arg_size = 0;
-//             int Done = 0;
-//             while(1){
-//                 int diff = (char *)args[arg_size] - (char *)args[arg_size+1];
-//                 fprintf(stderr, "%d\n",diff);
-//                 if( !is_arg_size((char *)args[arg_size] - (char *)args[arg_size+1]) ) Done = 1;
-//                 DEBUG_PRINT(RED"args[%d]: %p\n",arg_size, args[arg_size]);
-//                 DEBUG_PRINT(RED"args[%d]: %p\n",arg_size+1, args[arg_size+1]);
-//                 DEBUG_PRINT(RED"%p", *(void **)args[arg_size]);
-//                 if(pagetable.find(*(void **)args[arg_size]) != pagetable.end()){
-//                     //fprintf(stderr, " -> %p", pagetable[*(void **)args[arg_size]]);
-//                     args[arg_size] = (void *)&pagetable[*(void **)args[arg_size]];
-//                 }
-//                 //fprintf(stderr,"\n"RESET);
-//                 if(Done) break;
-//                 arg_size++;
-//             }
-//         }
-//     }
-//     err = cudaSuccess;
-//     CHECK_CUDA(lcudaLaunchKernel(func, gridDim, blockDim, args, sharedMem, stream));
-//     return err;
-// }
-
-
-
-// cudaError_t cudaLaunchKernel( const void* func, dim3 gridDim, dim3 blockDim, void** args, size_t sharedMem, cudaStream_t stream){
-//     cudaError_t err;
-//     int arg_size = *(int *)args[0];
-//     DEBUG_PRINT(RED"arg_size :%d\n"RESET,arg_size);
-//     void *new_args[arg_size];
-
-//     for(int i = 1; i < arg_size+1; i++){
-//         DEBUG_PRINT(RED"Old args: %p\n"RESET,*(void **)args[i]);
-//         if(pagetable.find(*(void **)args[i])!= pagetable.end()){
-//             DEBUG_PRINT(RED"New args: %p\n"RESET,pagetable[*(void **)args[i]]);
-//             new_args[i-1] = (void *)&pagetable[*(void **)args[i]];
-//         } 
-//         else new_args[i-1] = args[i];
-//     }
-    
-//     err = cudaSuccess;
-//     CHECK_CUDA(lcudaLaunchKernel(func, gridDim, blockDim, new_args, sharedMem, stream));
-//     return err;
-// }
-

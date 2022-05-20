@@ -342,12 +342,23 @@ int get_yolo_detections(layer l, int w, int h, int netw, int neth, float thresh,
     return count;
 }
 
+float checksum3(float * input, int size){
+    int items = size/sizeof(float);
+    float sum = 0;
+    for(int i = 0; i < items; i++){
+        sum += input[i];
+    }
+    return sum;
+}
+
 #ifdef GPU
 
 void forward_yolo_layer_gpu(const layer l, network net)
-{
+{   
+    //fprintf(stderr,"===YOLO===\n");
     copy_gpu(l.batch*l.inputs, net.input_gpu, 1, l.output_gpu, 1);
     int b, n;
+    
     for (b = 0; b < l.batch; ++b){
         for(n = 0; n < l.n; ++n){
             int index = entry_index(l, b, n*l.w*l.h, 0);

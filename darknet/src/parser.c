@@ -40,6 +40,7 @@
 #ifdef SCHEDULER
 #include <fcntl.h>
 #include <unistd.h>
+#include <sched.h>
 #define REG_MSG_SIZE 3
 
 int request_fd = -1;
@@ -49,9 +50,12 @@ int register_fd = -1;
 typedef struct _MSG_PACKET_REG{
     int regist;
     int pid;
-    int priority;
+    double period;
 }reg_msg;
-
+extern int Sync;
+extern char * logdir;
+FILE *log_fp;
+int prio;
 #endif
 
 typedef struct{
@@ -758,6 +762,7 @@ void parse_net_options(list *options, network *net)
     }
 
     net->priority = option_find_int(options, "priority", 0);
+    prio = net->priority;
 #endif
 }
 
@@ -795,6 +800,11 @@ network *parse_network_cfg(char *filename)
     free_section(s);
 
 #ifdef SCHEDULER
+    struct sched_param prior;
+    memset(&prior, 0, sizeof(struct sched_param));
+    prior.sched_priority = 50;
+    if(sched_setscheduler(getpid(), SCHED_FIFO, &prior) == -1) perror("SCHED_FIFO :");
+
     if( (register_fd = open("/tmp/scheduler", O_WRONLY)) < 0){
         perror("Opening Registration channel");
         exit(-1);
@@ -803,13 +813,13 @@ network *parse_network_cfg(char *filename)
     reg_msg * reg = (reg_msg *)malloc(sizeof(reg_msg));
     reg->regist = 1;
     reg->pid = getpid();
-    reg->priority = net->priority;
+    reg->period = net->period.tv_sec * 1000 + net->period.tv_nsec / 1000000;
 
-    if(write(register_fd, reg, REG_MSG_SIZE*sizeof(int)) < 0){
+    if(write(register_fd, reg, sizeof(reg_msg)) < 0){
         perror("Registrating : ");
         exit(-1);
     }
-    printf("==%d== Registrated!\n",getpid());
+    fprintf(stderr, "==%d== Registrated!\n",getpid());
 
     char request[50];
     char decision[50];
@@ -819,7 +829,25 @@ network *parse_network_cfg(char *filename)
 
     while( (request_fd = open(request, O_WRONLY)) < 0);
     while( (decision_fd = open(decision, O_RDONLY)) < 0);
-    printf("==%d== comms open!\n",getpid());
+    fprintf(stderr, "==%d== comms open!\n",getpid());
+    void *tmp;
+    cudaMalloc(&tmp, 1);
+    int ack = 99;
+    if( write(request_fd, &ack, sizeof(int)*1) == -1){
+        perror("Request Send :");
+        exit(-1);
+    }
+    int dec_ack;
+    if(read(decision_fd, &dec_ack, sizeof(int)*1) == -1){
+        perror("Decision Recv :");
+        exit(-1);
+    }
+#ifdef LOG
+    char logname[500];
+    snprintf(logname, 500, "%s/darknet/yolo_%d.log", logdir, net->priority);
+    log_fp = fopen(logname,"a");
+#endif
+
 
 #endif
 

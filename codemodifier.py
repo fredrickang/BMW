@@ -14,9 +14,9 @@ import fileinput
 
 
 dir_path = "./darknet"
-src_path = os.path.join(dir_path,"src")
+src_path = os.path.join(dir_path,"src_orig")
 bck_path = os.path.join(dir_path,"bck")
-mod_path = os.path.join(dir_path,"src2")
+mod_path = os.path.join(dir_path,"src3")
 
 
 # In[3]:
@@ -42,7 +42,7 @@ if not os.path.isdir(src_path):
 
 # read files & gather device functions information (name, the number of arguments) # find the __global__ functions 
 func_info = {}
-
+func_pointer = {}
 srcfile_list = [f for f in os.listdir(src_path) if os.path.isfile(os.path.join(src_path, f))]
 for srcfile in srcfile_list:
     f = open(os.path.join(src_path,srcfile), 'r')
@@ -65,10 +65,20 @@ for srcfile in srcfile_list:
             token = func_line.split()
             func_name = token[2].split("(")[0]
             func_info[func_name] = func_line.count(",")+1
+            
+            tokens = func_line.split(",")
+            pointer_bit = []
+            for i in range(len(tokens)):
+                if "*" in tokens[i]:
+                    pointer_bit.append(1)
+                else:
+                    pointer_bit.append(0)
+            
+            func_pointer[func_name] = pointer_bit
     f.close()
 
 
-# In[7]:
+# In[6]:
 
 
 # based on info, change func & launch
@@ -90,12 +100,24 @@ for srcfile in srcfile_list:
                 if "<<<" in codelines[linenum]:
                     while not ">>>" in codelines[linenum]:
                         linenum += 1
-                    codelines[linenum] = codelines[linenum].replace(">>>(", ">>>({}, ".format(func_info[key]))
+                    replacement = ">>>({}, ".format(func_info[key])
+                    for bit in func_pointer[func_name]:
+                        replacement += "{}, ".format(bit)
+                    codelines[linenum] = codelines[linenum].replace(">>>(", replacement)
                 else:
-                    codelines[linenum] = codelines[linenum].replace("(", "(int nargs, ",)
+                    replacement = "(int nargs, "
+                    for i in range(len(func_pointer[func_name])):
+                        replacement += "int ptr_bit_{}, ".format(i)
+                    codelines[linenum] = codelines[linenum].replace("(", replacement)
         linenum += 1
     f1.close()
     for codeline in codelines:
         f2.write(codeline)
     f2.close()
+
+
+# In[ ]:
+
+
+
 

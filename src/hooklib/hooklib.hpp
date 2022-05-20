@@ -78,6 +78,7 @@ typedef struct _ENTRY{
 }entry;
 
 typedef struct _SWAP{
+    void* origin_address;
     void* gpu_address;
     void* cpu_address;
     size_t size;
@@ -122,16 +123,19 @@ void Cleanup();
 void add_entry(map<int,entry>* entry_list, int index,  void* devPtr, size_t size);
 void del_entry(map<int,entry>* entry_list,  void* devPtr);
 
-void add_swap_entry(map<int,gswap>* entry_list, int index,  void* gpuPtr,  void* cpuPtr, size_t size);
+void add_swap_entry(map<int,gswap>* entry_list, int index, void* origPtr, void* gpuPtr,  void* cpuPtr, size_t size);
 void del_swap_entry(map<int,gswap>* entry_list,  void* devPtr);
 
 int find_index_by_ptr(map<int,entry>* entry_list,  void* devPtr);
-
+bool exist_in_entry(map<int,entry> * entry_list, void *devPtr);
+int floorSearch(void * addr);
 void swapout(int signum);
 void swapin(int signum);
 void DEBUG_PRINT_SWAP();
 void DEBUG_PRINT_PAGETABLE();
 void DEBUG_PRINT_ENTRY();
+void * check_pointer_arithmetic(void *, const char*);
+float checksum(float * input, int size);
 
 /* CUDA memory hook */
 static cudaError_t (*lcudaMalloc)(void **, size_t) = (cudaError_t (*) (void**, size_t))dlsym(RTLD_NEXT,"cudaMalloc");

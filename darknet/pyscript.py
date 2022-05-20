@@ -33,6 +33,7 @@ def dnn(prio, wMMP, exp_log_dir):
     prio = prio+1
 
     command_line = []
+    #command_line.append("cuda-memcheck")
     command_line.append("./darknet")
     command_line.append("detector")
     command_line.append("test")

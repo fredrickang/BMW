@@ -52,7 +52,7 @@ layer make_batchnorm_layer(int batch, int w, int h, int c)
 
     l.rolling_mean_gpu = cuda_make_array(l.mean, c);
     l.rolling_variance_gpu = cuda_make_array(l.variance, c);
-
+    
     l.mean_delta_gpu = cuda_make_array(l.mean, c);
     l.variance_delta_gpu = cuda_make_array(l.variance, c);
 
