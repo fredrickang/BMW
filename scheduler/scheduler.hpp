@@ -14,7 +14,7 @@ int main(int argc, char **argv);
 double what_time_is_it_now();
 
 typedef enum{
-    IDLE, BUSY, ALIVE, TERM, WARMUP
+    IDLE, BUSY, ALIVE, TERM, INIT, SWAPOUT, SWAPIN,
 }STATE;
 
 typedef enum{
@@ -22,6 +22,7 @@ typedef enum{
 }cudaAPI;
 
 typedef struct _TASK_INFO{
+    STATE state;
     int pid;
     int id;
     int sch_req_fd;
@@ -31,6 +32,11 @@ typedef struct _TASK_INFO{
     double scheduled_time;
     double period;
     double deadline;
+    
+    size_t mem_size;
+    size_t swap_max;
+    size_t swap_curr;
+
     map<int,size_t> *m_entry;
     struct _TASK_INFO *next;
 }task_info_t;
@@ -78,4 +84,9 @@ typedef struct _MSG_PACKET_EVICT{
     int start_idx;
     int end_idx;
 }evict_msg;
+
+typedef struct _MSG_PACKET_IN{
+    int type; // 0: init, 1: alive
+    size_t size;
+}in_msg;
 

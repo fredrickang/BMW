@@ -52,6 +52,7 @@ typedef struct _MSG_PACKET_REG{
     int pid;
     double period;
 }reg_msg;
+
 extern int Sync;
 extern char * logdir;
 FILE *log_fp;
@@ -754,8 +755,8 @@ void parse_net_options(list *options, network *net)
     net->max_batches = option_find_int(options, "max_batches", 0);
 
 #ifdef SCHEDULER
-    double period_ns = option_find_int(options, "period", 0) * 1000000;
-    net->period.tv_nsec = period_ns;
+    long period_ms = option_find_int(options, "period", 0);
+    net->period.tv_nsec = period_ms * 1000000;
     while (net->period.tv_nsec >= 1000000000){
         ++net->period.tv_sec;
         net->period.tv_nsec -= 1000000000;

@@ -587,7 +587,7 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
     char *input = buff;
     float nms=.45;
     while(1){
-        for(int job = 0; job < 10; job++){
+        for(int job = 0; job < 3; job++){
 
             fprintf(stdout, "==== Job(%d %d) ====\n",getpid(), job);
             if(filename){

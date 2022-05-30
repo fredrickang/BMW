@@ -589,7 +589,7 @@ float *network_predict(network *net, float *input)
     sched_s = what_time_is_it_now();
 #endif
 #ifdef SCHEDULER
-    atexit(deregistration);
+    if(Sync) atexit(deregistration);
     if(release_time != NULL){
         clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &release_time, NULL);
         timespec_add(release_time, &net->period);

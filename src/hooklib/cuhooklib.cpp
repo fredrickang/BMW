@@ -230,15 +230,61 @@ int floorSearch(void * addr){
 // 2. request space to MMP
 // 3. copy memory into device
 
+// void swapin(int signum){
+//     double si_s, si_e;
+//     si_s = what_time_is_it_now();
+//     DEBUG_PRINT(GREEN "Swap-in (SIGUSR2) handler callback\n" RESET);
+//     void *dummy;
+//     SendRequest(dummy,_SWAPIN_,SWAPOUT_SIZE);
+//     DEBUG_PRINT(GREEN"space reservation done\n"RESET);
+//     for(auto iter = swap_entry_list.begin(); iter != swap_entry_list.end(); iter++){
+//         int index = iter->first;
+//         size_t size = iter->second.size;
+//         void* new_address;
+//         void* old_address = iter->second.gpu_address;
+//         void* orig_address = iter->second.origin_address;
+//         char* hostPtr = (char *)iter->second.cpu_address;
+
+//         CHECK_CUDA(lcudaMalloc(&new_address, size));
+//         CHECK_CUDA(lcudaMemcpy(new_address, hostPtr, size, cudaMemcpyHostToDevice));
+
+//         SendRequest(old_address,_cudaMalloc_, size, index);
+//         add_entry(&gpu_entry_list, index, orig_address, size);
+
+//         free(hostPtr);
+//         /* page table update */
+//         DEBUG_PRINT(GREEN "Swap in Addr: %p, Size: %d\n" RESET, new_address, size);
+//         pagetable[orig_address] = new_address;
+//         swap_in_sz_tot += size;
+//     } 
+//     SWAPOUT_SIZE = 0;
+//     swap_entry_list.clear();
+//     DEBUG_PRINT_SWAP();
+//     DEBUG_PRINT_ENTRY();
+//     DEBUG_PRINT_PAGETABLE();
+//     si_e = what_time_is_it_now();
+//     swap_in_time += (si_e - si_s);
+// }
+
 void swapin(int signum){
-    double si_s, si_e;
-    si_s = what_time_is_it_now();
     DEBUG_PRINT(GREEN "Swap-in (SIGUSR2) handler callback\n" RESET);
+    in_msg *msg = (in_msg *)malloc(sizeof(in_msg));
+    CHECK_COMM(read(decision_fd, msg, sizeof(in_msg)));
+    
+    size_t swapin_size = msg->size;
+    size_t process_size = 0;
+    
+    if(msg->type == 1) swapin_size = SWAPOUT_SIZE;
+    
+    DEBUG_PRINT(GREEN"MSG type(%d) Size(%lu)\n"RESET, msg->type, msg->size);
     void *dummy;
-    SendRequest(dummy,_SWAPIN_,SWAPOUT_SIZE);
-    DEBUG_PRINT(GREEN"space reservation done\n"RESET);
-    for(auto iter = swap_entry_list.begin(); iter != swap_entry_list.end(); iter++){
+    SendRequest(dummy,_SWAPIN_,swapin_size);
+    DEBUG_PRINT(GREEN"Space(%lu) reservation done\n"RESET, swapin_size);
+    list<int> elist;
+
+    for(auto iter = swap_entry_list.rbegin(); iter != swap_entry_list.rend(); ++iter){
         int index = iter->first;
+        elist.push_back(index);
         size_t size = iter->second.size;
         void* new_address;
         void* old_address = iter->second.gpu_address;
@@ -253,18 +299,24 @@ void swapin(int signum){
 
         free(hostPtr);
         /* page table update */
-        DEBUG_PRINT(GREEN "Swap in Addr: %p, Size: %d\n" RESET, new_address, size);
+        process_size += size;
+        DEBUG_PRINT(GREEN "Swap in Addr: %p, Size: %lu\n" RESET, new_address, size);
         pagetable[orig_address] = new_address;
-        swap_in_sz_tot += size;
+        if(process_size >= swapin_size) break;        
     } 
-    SWAPOUT_SIZE = 0;
-    swap_entry_list.clear();
+    SWAPOUT_SIZE -= process_size;
+    //swap_entry_list.clear();
+    for(auto iter = elist.begin(); iter != elist.end(); iter++){
+        swap_entry_list.erase(swap_entry_list.find(*iter));
+    }
     DEBUG_PRINT_SWAP();
     DEBUG_PRINT_ENTRY();
     DEBUG_PRINT_PAGETABLE();
-    si_e = what_time_is_it_now();
-    swap_in_time += (si_e - si_s);
 }
+
+
+
+
 
 /* Swap out handler */
 void swapout(int signum){
@@ -345,7 +397,7 @@ void* swapThread(void *vargsp){
                 if(SWAP_OUT) swapin(signum);
                 CHECK_COMM(write(request_fd, msg, sizeof(req_msg)));
                 DEBUG_PRINT(GREEN "Swap-in Complete\n" RESET);
-                SWAP_OUT = false;   // swapped flag off
+                if(SWAPOUT_SIZE == 0) SWAP_OUT = false;   // swapped flag off
                 break;
             case SIGTERM:
                 DEBUG_PRINT(BLUE "Swap Thread Terminating\n" RESET);

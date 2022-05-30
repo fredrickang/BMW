@@ -15,7 +15,8 @@
 #include "scheduler_fn.hpp"
 
 
-#define MEM_LIMIT 10737418240
+//#define MEM_LIMIT 10737418240 //10GB
+#define MEM_LIMIT 16106127360 //15GB
 #define string(x) #x
 
 static size_t mem_current = 0;
@@ -101,10 +102,6 @@ void FrontBackSplit(node_t* source,
     *backRef = slow->next;
     slow->next = NULL;
 }
- 
-
-
-
 
 void del_arg(int argc, char **argv, int index)
 {
@@ -142,8 +139,6 @@ char *find_char_arg(int argc, char **argv, char *arg, char *def)
     }
     return def;
 }
-
-
 
 double what_time_is_it_now()
 {
@@ -247,8 +242,6 @@ void de_register_task(task_list_t *task_list, task_info_t *task){
     return;
 } 
 
-
-
 /* Resources */
 
 resource_t *create_resource(){
@@ -276,58 +269,34 @@ queue_t *create_queue(){
     return q; 
 }
 
-int enqueue(queue_t *q, int pid, double deadline){
-    DEBUG_PRINT(BLUE"Enqueue Job(%d %f)\n"RESET,pid, deadline);
+int enqueue(char * que_name, queue_t *q, int pid, double deadline){
+    DEBUG_PRINT(BLUE"[%s] Enqueue Job(%d %f)\n"RESET, que_name, pid, deadline);
     node_t *tmp = new_node(pid, deadline);
 
     q->count ++;
 
     if(q->front == NULL){
         q->front = tmp;
+        print_queue(que_name, q);
         return -1;
     }
 
     node_t * iter = q->front;
     if(iter->deadline > tmp->deadline){
-        q->front = tmp;
         tmp->next = iter;
+        q->front = tmp;
     }
-    
-    while(iter->next != NULL && iter->next->deadline <= tmp->deadline){
-        iter = iter->next;
+    else{
+        while(iter->next != NULL && iter->next->deadline <= tmp->deadline){
+            iter = iter->next;
+        }
+        tmp->next = iter->next;
+        iter->next = tmp;
     }
-    tmp->next = iter->next;
-    iter->next = tmp;
-    print_queue("WQ", q);
+    print_queue(que_name, q);
 }
 
-// int enqueue_backward(queue_t *q, int pid, int priority){
-//     DEBUG_PRINT(BLUE"Enqueue Init Job(%d %d)\n"RESET,pid, priority);
-//     node_t *tmp = new_node(pid, priority);
-//     q->count ++;    
-    
-//     if(q->front == NULL){
-//         q->front = tmp;
-//         print_queue("WQ", q);
-//         return -1;
-//     }    
-
-//     if(q->front -> priority < tmp-> priority){
-//         tmp->next = q->front;
-//         q->front = tmp;
-//     }
-//     else{
-//         node_t *iter = q->front;
-//         while(iter->next != NULL && iter->next->priority < tmp->priority){
-//             iter = iter->next;
-//         }
-//         tmp->next = iter->next;
-//         iter->next = tmp;
-//     }
-//     print_queue("WQ", q);
-// }
-
-int dequeue(queue_t *q, resource_t *res){
+int dequeue_asyncswap(char * que_name, queue_t *q, resource_t *res){
     if (q -> front == NULL){
         //DEBUG_PRINT(RED"Waiting Queue empty\n"RESET);
         return -1;
@@ -335,7 +304,7 @@ int dequeue(queue_t *q, resource_t *res){
     
     node_t *target = q->front;
     
-    DEBUG_PRINT(BLUE"Dequeue Job(%d %f)\n"RESET,target->pid, target->deadline);
+    DEBUG_PRINT(BLUE"[%s] Dequeue Job(%d %f)\n"RESET,que_name, target->pid, target->deadline);
     q->front = target->next;
 
     int target_pid = target->pid;
@@ -346,11 +315,37 @@ int dequeue(queue_t *q, resource_t *res){
     
     q -> count --;
     free(target);
-    print_queue("WQ", q);
+    print_queue(que_name, q);
     return target_pid;
 }  
 
-int dequeue_backward(queue_t *q, resource_t *res){
+
+
+
+int dequeue(char * que_name, queue_t *q, resource_t *res){
+    if (q -> front == NULL){
+        //DEBUG_PRINT(RED"Waiting Queue empty\n"RESET);
+        return -1;
+    }
+    
+    node_t *target = q->front;
+    
+    DEBUG_PRINT(BLUE"[%s] Dequeue Job(%d %f)\n"RESET,que_name, target->pid, target->deadline);
+    q->front = target->next;
+
+    int target_pid = target->pid;
+
+    res -> state = BUSY;
+    res -> pid  = target_pid;  
+    res -> scheduled = what_time_is_it_now();
+    
+    q -> count --;
+    free(target);
+    print_queue(que_name, q);
+    return target_pid;
+}  
+
+int dequeue_backward(char * que_name, queue_t *q, resource_t *res){
     if (q -> front == NULL){
         //DEBUG_PRINT(RED"Waiting Queue empty\n"RESET);
         return -1;
@@ -368,7 +363,7 @@ int dequeue_backward(queue_t *q, resource_t *res){
     else{
         prev->next = NULL;
     }
-    DEBUG_PRINT(BLUE"Dequeue Job(%d %f)\n"RESET,target->pid, target->deadline);
+    DEBUG_PRINT(BLUE"[%s] Dequeue Job(%d %f)\n"RESET,que_name, target->pid, target->deadline);
     
     int target_pid = target->pid;
 
@@ -378,7 +373,7 @@ int dequeue_backward(queue_t *q, resource_t *res){
     
     q -> count --;
     free(target);
-    print_queue("WQ", q);
+    print_queue(que_name, q);
     return target_pid;
 }  
 
@@ -388,7 +383,7 @@ void update_deadline(task_info_t *task, double current_time){
     DEBUG_PRINT(BLUE"Deadline update (%d %f)\n"RESET,task->pid, task->deadline);
 }
 
-void send_release_time(task_list_t *task_list, queue* waiting_queue){
+void send_release_time(task_list_t *task_list, queue_t* waiting_queue, queue_t* swapin_queue){
     struct timespec release_time;
     clock_gettime(CLOCK_MONOTONIC, &release_time);
     double current_time = what_time_is_it_now();
@@ -401,8 +396,16 @@ void send_release_time(task_list_t *task_list, queue* waiting_queue){
         task_info_t * target = find_task_by_pid(task_list, node->pid);
         node->deadline = current_time + target->period * 0.001;
     }
+    for(node_t * node = swapin_queue->front; node != NULL; node = node -> next){
+        task_info_t * target = find_task_by_pid(task_list, node->pid);
+        node->deadline = current_time + target->period * 0.001;
+    }
+
     MergeSort(&waiting_queue->front);
-    print_queue("WQ", waiting_queue);
+    MergeSort(&swapin_queue->front);
+
+    print_queue("GPU", waiting_queue);
+    print_queue("SwapIn", swapin_queue);
 }
 
 task_info_t *find_task_by_pid(task_list_t *task_list, int pid){
@@ -429,12 +432,21 @@ void do_register(task_list_t *task_list, reg_msg *msg){
     task -> pid = msg -> pid;
     task -> id = task_list->count;
     task -> period = msg -> period;
+    task -> deadline = task -> period;
     task -> m_entry = new map<int, size_t>();
     task -> scheduled_time = 0;
+    task -> state = INIT;
+
+    task -> mem_size = 7131954632;
+    task -> swap_max = 6218888888;
+    if(task->id == 1) task -> swap_max = 0;
+    task -> swap_curr = 0;
 
     DEBUG_PRINT(BLUE"======== REGISTRATION ========\n"RESET);
     DEBUG_PRINT(BLUE"[PID]      %3d\n"RESET, task-> pid);
-    DEBUG_PRINT(BLUE"[Period] %3f\n"RESET, task-> period);
+    DEBUG_PRINT(BLUE"[Period]   %3f\n"RESET, task-> period);
+    DEBUG_PRINT(BLUE"[Mem]      %10lu\n"RESET, task->mem_size);
+    DEBUG_PRINT(BLUE"[Swap max] %10lu\n"RESET, task->swap_max);
     
     char sch_req_fd_name[50];
     char sch_dec_fd_name[50];
@@ -481,38 +493,50 @@ void deregister(task_list_t *task_list, reg_msg *msg, resource_t *res){
 
 // Request Handler //
 
-void sch_request_handler(task_list_t *task_list, task_info_t *task, resource_t *res, resource_t *init_que){    
+void sch_request_handler(task_list_t *task_list, task_info_t *task, resource_t *res, resource_t *init_que, resource_t *swap_in){    
     int ack;
     commErrchk(read(task -> sch_req_fd, &ack, sizeof(int)));
     
     if(ack == 99){
-        enqueue(init_que->waiting, task->pid, task->deadline);
+        enqueue("init_que", init_que->waiting, task->pid, task->deadline);
         return;
     }
+
     if(init_que -> state == BUSY && init_que -> pid == task -> pid){
-        DEBUG_PRINT(GREEN"Init done(%d)\n"RESET,task->pid);
-#ifdef LOG
-        fprintf(fps[task->priority-1],"%f,",(what_time_is_it_now() - init_que->scheduled));
-#endif
+        DEBUG_PRINT(GREEN"Init done(%d) - %f\n"RESET,task->pid, what_time_is_it_now());
         init_que -> state = IDLE;
         init_que -> pid = -1;
+        task -> state = ALIVE;
     }
     
     if(res -> state == BUSY && res -> pid == task->pid){ /* Job termniation */
-        DEBUG_PRINT(GREEN"Term Job(%d)\n"RESET,task->pid);
-#ifdef LOG
-        fprintf(fps[task->priority-1],"%f\n",(what_time_is_it_now() - res->scheduled));
-#endif 
+        DEBUG_PRINT(GREEN"Term Job(%d) - %f\n"RESET,task->pid, what_time_is_it_now());
         res -> state = IDLE;
         res -> pid = -1;
+        // swap out 
+        
+        if(swap_in->waiting->count != 0){
+            print_queue("SwapIn", swap_in->waiting);
+            task_info_t * highest_task = find_task_by_pid(task_list, swap_in->waiting->front->pid);
+
+            if(highest_task->swap_curr > (MEM_LIMIT - mem_current) && task->swap_max != 0){
+                size_t outted = swapout_async(task_list, task, (highest_task->swap_curr - (MEM_LIMIT - mem_current)));
+                DEBUG_PRINT(GREEN"Swap Out(%d) - %10lu\n"RESET,task->pid, outted);
+            }
+        }
     }
     else{ /* Job release */
-        double current_time = what_time_is_it_now();
-        update_deadline(task, current_time);
-        DEBUG_PRINT(GREEN"Release Job(%d)\n"RESET,task->pid);
-        enqueue(res->waiting, task->pid, task->deadline);
+        update_deadline(task, task->deadline);
+        DEBUG_PRINT(GREEN"Release Job(%d) - %f\n"RESET,task->pid, what_time_is_it_now());
+        enqueue("GPU", res->waiting, task->pid, task->deadline);
+        if(task->swap_curr != 0) enqueue("SwapIn", swap_in->waiting, task->pid, task->deadline);
     }
 }
+
+
+
+
+
 
 cudaAPI mm_request_handler(task_list_t * proc_list, task_info_t * proc){
     req_msg *msg = (req_msg *)malloc(sizeof(req_msg));
@@ -522,7 +546,7 @@ cudaAPI mm_request_handler(task_list_t * proc_list, task_info_t * proc){
     DEBUG_PRINT(GREEN"[REQEUST %d/%d] Index: %3d API: %15s Size: %lu\n"RESET, proc->id, proc->pid, msg->entry_index ,getcudaAPIString(msg->type), msg->size);
     
     if(msg->type == _SWAPIN_){
-        DEBUG_PRINT(GREEN "[SWAP IN] Reqested: %d, Size: %lu\n"RESET, proc->pid, msg->size);
+        DEBUG_PRINT(GREEN "[SWAP IN] Reqested: %d, Size: %10lu\n"RESET, proc->pid, msg->size);
         if(mem_current + msg->size > MEM_LIMIT){
             size_t should_swap_out = mem_current + msg->size - MEM_LIMIT;
             size_t swap_outed = 0;
@@ -538,12 +562,12 @@ cudaAPI mm_request_handler(task_list_t * proc_list, task_info_t * proc){
     }
 
     if(msg->type == _Done_){
-        DEBUG_PRINT(GREEN"Swap-in/out Done\n"RESET);
+        proc->state = ALIVE;
+        DEBUG_PRINT(GREEN"Swap-in/out Done(%d)\n"RESET, proc->pid);
         return _Done_;
     }
 
     if(msg->type == _cudaMalloc_){
-        /* Memory overflow handling */
         if(mem_current + msg->size > MEM_LIMIT){
             size_t should_swap_out = mem_current + msg->size - MEM_LIMIT;
             size_t swap_outed = 0;
@@ -553,9 +577,11 @@ cudaAPI mm_request_handler(task_list_t * proc_list, task_info_t * proc){
                     DEBUG_PRINT(RED"[Error] Victim not exist\n"RESET);
                     exit(-1);
                 }
-                swap_outed += swapout(proc_list, victim, (should_swap_out - swap_outed));
+                if(proc->state == INIT) swap_outed += swapout_init(proc_list, victim, (should_swap_out - swap_outed));
+                if(proc->state == ALIVE)swap_outed += swapout(proc_list, victim, (should_swap_out - swap_outed));
             }
         }
+        
         /* Update entry */
         proc->m_entry->insert(make_pair(msg->entry_index,msg->size));
         /* Update memory status */
@@ -612,7 +638,7 @@ void init_decision_handler(int target_pid, task_list_t *task_list){
     commErrchk(write(target->sch_dec_fd,&ack,sizeof(int)));
 }
 
-void decision_handler(int target_pid, task_list_t *task_list){
+void decision_handler(int target_pid, task_list_t *task_list, resource_t *swap_in){
 
     int ack = 0;
     task_info_t *target = find_task_by_pid(task_list, target_pid);
@@ -626,7 +652,10 @@ void decision_handler(int target_pid, task_list_t *task_list){
 
     DEBUG_PRINT(GREEN"Check Swap(%d)\n"RESET,target->pid);
     
-    swapin(task_list, target);
+    if(target->swap_curr != 0){
+        swapin(task_list, target, 1, 0);
+        dequeue("SwapIn",swap_in->waiting, swap_in);
+    }
 
     DEBUG_PRINT(GREEN"Swap Done(%d)\n"RESET,target->pid);
 
@@ -638,19 +667,169 @@ void decision_handler(int target_pid, task_list_t *task_list){
     commErrchk(write(target->sch_dec_fd ,&ack,sizeof(int)));
 }
 
-void swapin(task_list_t * task_list, task_info_t *target){    
-    int target_pid = target->pid;
-    kill(target_pid, SIGUSR2);
+size_t swapin(task_list_t* proc_list, task_info_t* proc, int type, size_t size){
+    in_msg * msg = (in_msg *)malloc(sizeof(in_msg));
+    msg->type = type;
+    msg->size = size;
+    commErrchk(write(proc->mm_dec_fd, msg, sizeof(in_msg)));
+    kill(proc->pid, SIGUSR2);
+    proc->state = SWAPIN;
     cudaAPI ret;
     do{
-        ret = mm_request_handler(task_list, target);
+        ret = mm_request_handler(proc_list, proc);
     }while(ret != _Done_);
-    
-    // send to scheduler 
-    target-> scheduled_time = what_time_is_it_now();
-    int ack;
+
+    if(msg->type != 0){
+        proc->scheduled_time = what_time_is_it_now();
+        proc->swap_curr = 0;
+    }else{
+        proc->swap_curr -= size;
+    }
+    return size;
 }
 
+
+size_t swapout_init(task_list_t* proc_list, task_info_t* proc, size_t size){
+    size_t evict_size = 0;
+    list<int> evict_entry_list;
+
+    // find evict pages
+    auto iter  = proc->m_entry->begin();
+    while(iter != proc->m_entry->end() && (evict_size < size) ){
+        evict_entry_list.push_back(iter->first);
+        evict_size += iter->second;
+        proc->swap_curr += iter->second;
+        ++iter;
+    }
+    
+    if(evict_entry_list.size() == 0){
+        DEBUG_PRINT(RED"Victim(%d) has no pages to swap out\n"RESET, proc->pid);
+        exit(-1);
+    }
+
+    // evict protocal
+    // 1. wake the victim process
+    // 2. send evict list
+    int evict_entry_front = evict_entry_list.front();
+    int evict_entry_back = evict_entry_list.back();
+
+    int ack;
+    evict_msg * msg =(evict_msg *)malloc(sizeof(evict_msg));
+    msg->start_idx = evict_entry_front;
+    msg->end_idx = evict_entry_back;
+
+    DEBUG_PRINT(GREEN "[SWAP OUT] Victim: %d, Size: %10lu, Index: %4d to %4d\n" RESET, proc->pid, evict_size, evict_entry_front, evict_entry_back);
+
+    commErrchk(write(proc->mm_dec_fd, msg, sizeof(evict_msg)));    
+   
+    kill(proc->pid, SIGUSR1);
+
+    cudaAPI ret;
+    do{
+        ret = mm_request_handler(proc_list, proc);
+    }while(ret != _Done_);
+
+    return evict_size;
+}
+
+size_t swapout(task_list_t* proc_list, task_info_t* proc, size_t size){
+    size_t evict_size = 0;
+    list<int> evict_entry_list;
+
+    // find evict pages
+    auto iter  = proc->m_entry->begin();
+    while(iter != proc->m_entry->end() && (evict_size < size) && (proc->swap_max > proc->swap_curr)){
+        evict_entry_list.push_back(iter->first);
+        evict_size += iter->second;
+        proc->swap_curr += iter->second;
+        ++iter;
+    }
+    
+    if(evict_entry_list.size() == 0){
+        DEBUG_PRINT(RED"Victim(%d) has no pages to swap out\n"RESET, proc->pid);
+        exit(-1);
+    }
+
+    // evict protocal
+    // 1. wake the victim process
+    // 2. send evict list
+    int evict_entry_front = evict_entry_list.front();
+    int evict_entry_back = evict_entry_list.back();
+
+    int ack;
+    evict_msg * msg =(evict_msg *)malloc(sizeof(evict_msg));
+    msg->start_idx = evict_entry_front;
+    msg->end_idx = evict_entry_back;
+
+    DEBUG_PRINT(GREEN "[SWAP OUT] Victim: %d, Size: %10lu, Index: %4d to %4d\n" RESET, proc->pid, evict_size, evict_entry_front, evict_entry_back);
+
+    commErrchk(write(proc->mm_dec_fd, msg, sizeof(evict_msg)));    
+   
+    kill(proc->pid, SIGUSR1);
+    proc->state = SWAPOUT;
+    cudaAPI ret;
+    do{
+        ret = mm_request_handler(proc_list, proc);
+    }while(ret != _Done_);
+
+    return evict_size;
+}
+
+size_t swapout_async(task_list_t* proc_list, task_info_t* proc, size_t size){
+    size_t evict_size = 0;
+    list<int> evict_entry_list;
+
+    // find evict pages
+    auto iter  = proc->m_entry->begin();
+    while(iter != proc->m_entry->end() && (evict_size < size) && (proc->swap_max > proc->swap_curr)){
+        evict_entry_list.push_back(iter->first);
+        evict_size += iter->second;
+        proc->swap_curr += iter->second;
+        ++iter;
+    }
+    
+    if(evict_entry_list.size() == 0){
+        DEBUG_PRINT(RED"Victim(%d) has no pages to swap out\n"RESET, proc->pid);
+        exit(-1);
+    }
+
+    // evict protocal
+    // 1. wake the victim process
+    // 2. send evict list
+    int evict_entry_front = evict_entry_list.front();
+    int evict_entry_back = evict_entry_list.back();
+
+    int ack;
+    evict_msg * msg =(evict_msg *)malloc(sizeof(evict_msg));
+    msg->start_idx = evict_entry_front;
+    msg->end_idx = evict_entry_back;
+
+    DEBUG_PRINT(GREEN "[SWAP OUT] Victim: %d, Size: %10lu, Index: %4d to %4d\n" RESET, proc->pid, evict_size, evict_entry_front, evict_entry_back);
+
+    commErrchk(write(proc->mm_dec_fd, msg, sizeof(evict_msg)));    
+   
+    kill(proc->pid, SIGUSR1);
+    proc->state = SWAPOUT;
+    return evict_size;  
+}
+
+void init_memory_setting(queue_t * waiting, task_list_t * task_list, resource_t * swap_in){
+    // increasing order of swapped amount (front: no swap, ---)
+    DEBUG_PRINT(RED"==Init memory setting==\n"RESET);
+    for(node_t *tmp = waiting->front; tmp != NULL; tmp = tmp->next){
+        task_info_t *task = find_task_by_pid(task_list, tmp->pid);
+        if(task->swap_curr < task->swap_max) swapout(task_list, task, (task->swap_max - task->swap_curr));
+        DEBUG_PRINT(RED"Task(%d) Curr: %lu, Max: %lu\n"RESET, task->pid, task->swap_curr, task->swap_max);
+    }
+    for(node_t *tmp = waiting->front; tmp != NULL; tmp = tmp->next){
+        task_info_t *task = find_task_by_pid(task_list, tmp->pid);
+        
+        if(task->swap_curr > task->swap_max) swapin(task_list, task, 0, (task->swap_curr - task->swap_max));
+        DEBUG_PRINT(RED"Task(%d) Curr: %lu, Max: %lu\n"RESET, task->pid, task->swap_curr, task->swap_max);
+        if(task->swap_curr != 0) enqueue("SwapIn", swap_in->waiting, task->pid, task->deadline);
+    }
+    DEBUG_PRINT(RED"==Init memory setting Done==\n"RESET);
+}
 
 
 ///// communication ////
@@ -721,47 +900,7 @@ int make_fdset(fd_set *readfds, int reg_fd, task_list_t *task_list){
 }
 
 
-size_t swapout(task_list_t* proc_list, task_info_t* proc, size_t size){
-    size_t evict_size = 0;
-    list<int> evict_entry_list;
 
-    // find evict pages
-    auto iter  = proc->m_entry->begin();
-    while(iter != proc->m_entry->end() && (evict_size <= size)){
-        evict_entry_list.push_back(iter->first);
-        evict_size += iter->second;
-        ++iter;
-    }
-    
-    if(evict_entry_list.size() == 0){
-        DEBUG_PRINT(RED"Victim(%d) has no pages to swap out\n"RESET, proc->pid);
-        exit(-1);
-    }
-
-    // evict protocal
-    // 1. wake the victim process
-    // 2. send evict list
-    int evict_entry_front = evict_entry_list.front();
-    int evict_entry_back = evict_entry_list.back();
-
-    int ack;
-    evict_msg * msg =(evict_msg *)malloc(sizeof(evict_msg));
-    msg->start_idx = evict_entry_front;
-    msg->end_idx = evict_entry_back;
-
-    DEBUG_PRINT(GREEN "[SWAP OUT] Victim: %d, Size: %lu, Index: %d to %d\n" RESET, proc->pid, evict_size, evict_entry_front, evict_entry_back);
-
-    commErrchk(write(proc->mm_dec_fd, msg, sizeof(evict_msg)));    
-   
-    kill(proc->pid, SIGUSR1);
-
-    cudaAPI ret;
-    do{
-        ret = mm_request_handler(proc_list, proc);
-    }while(ret != _Done_);
-
-    return evict_size;
-}
 
 
 char * getcudaAPIString(cudaAPI type){

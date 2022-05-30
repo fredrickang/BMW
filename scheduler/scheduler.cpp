@@ -36,14 +36,15 @@ int main(int argc, char **argv){
         snprintf(logname,100,"%s/scheduler/sch_%d.log",logdir, i+1);
         fps[i] = fopen(logname, "a");
     }
-#endif LOG
+#endif 
 
     task_list_t *task_list = create_task_list();
-    resource_t *gpu, *init_que;
+    resource_t *gpu, *init_que, *swap_in;
     
     gpu = create_resource();
     init_que = create_resource();
-        
+    swap_in = create_resource();
+    
     int reg_fd = open_channel(REGISTRATION, O_RDONLY | O_NONBLOCK);
 
     int target_pid;
@@ -62,25 +63,27 @@ int main(int argc, char **argv){
             }
 
             for(task = task_list ->head; task !=NULL; task = task -> next){
-                if(FD_ISSET(task->sch_req_fd, &readfds))
-                    sch_request_handler(task_list, task, gpu, init_que);
+                if(FD_ISSET(task->sch_req_fd, &readfds)){
+                    sch_request_handler(task_list, task, gpu, init_que, swap_in);
+                }
                 if(FD_ISSET(task->mm_req_fd, &readfds))
                     mm_request_handler(task_list, task);
             }
 
             if(!(init_que->waiting->count < init_sync)){
                 init_sync = 0;
-                if(init_que -> state == IDLE) target_pid = dequeue_backward(init_que->waiting, init_que);
+                if(init_que -> state == IDLE) target_pid = dequeue_backward("init_que",init_que->waiting, init_que);
                 if(target_pid != -1) init_decision_handler(target_pid, task_list);
             }
 
             if( !(gpu->waiting->count < sync) && (init_que->waiting->count == 0)){
                 if(sync){
-                    send_release_time(task_list, gpu->waiting);
+                    init_memory_setting(gpu->waiting, task_list, swap_in);
+                    send_release_time(task_list, gpu->waiting, swap_in->waiting);
                     sync = 0;
                 }
-                if(gpu -> state == IDLE) target_pid = dequeue(gpu->waiting, gpu);
-                if(target_pid != -1) decision_handler(target_pid, task_list);
+                if(gpu -> state == IDLE) target_pid = dequeue("GPU", gpu->waiting, gpu);
+                if(target_pid != -1) decision_handler(target_pid, task_list, swap_in);
             }
         }
     }while(!(task_list -> count == 0)); 

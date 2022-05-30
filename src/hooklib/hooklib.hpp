@@ -99,6 +99,11 @@ typedef struct _MSG_PACKET_EVICT{
     int end_idx;
 }evict_msg;
 
+typedef struct _MSG_PACKET_IN{
+    int type;
+    size_t size;
+}in_msg;
+
 typedef struct _MSG_PACKET_REGIST{
     int reg_type;
     int pid;
