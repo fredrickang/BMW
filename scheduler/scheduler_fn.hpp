@@ -52,6 +52,7 @@ queue_t *create_queue();
 int enqueue(char * que_name,queue_t *q, int pid, double deadline);
 void nodeDelete(queue_t *q, node_t *del);
 int dequeue(char * que_name, queue_t *q, resource_t *res);
+int dequeue_asyncswap(char * que_name, queue_t *q, task_list_t *task_list, resource_t *res);
 void update_deadline(task_info_t *task, double current_time);
 void send_release_time(task_list_t *task_list, queue_t* waiting_queue, queue_t* swapin_queue);
 task_info_t *find_task_by_id(task_list_t *task_list, int id);

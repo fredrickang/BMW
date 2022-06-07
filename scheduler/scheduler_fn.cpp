@@ -27,7 +27,6 @@ node_t* SortedMerge(node_t* a, node_t* b);
 void FrontBackSplit(node_t* source,
                     node_t** frontRef, node_t** backRef);
  
-/* sorts the linked list by changing next pointers (not data) */
 void MergeSort(node_t** headRef)
 {
     node_t* head = *headRef;
@@ -50,8 +49,6 @@ void MergeSort(node_t** headRef)
     *headRef = SortedMerge(a, b);
 }
  
-/* See https:// www.geeksforgeeks.org/?p=3622 for details of this
-function */
 node_t* SortedMerge(node_t* a, node_t* b)
 {
     node_t* result = NULL;
@@ -74,11 +71,6 @@ node_t* SortedMerge(node_t* a, node_t* b)
     return (result);
 }
  
-/* UTILITY FUNCTIONS */
-/* Split the nodes of the given list into front and back halves,
-    and return the two lists using the reference parameters.
-    If the length is odd, the extra node should go in the front list.
-    Uses the fast/slow pointer strategy. */
 void FrontBackSplit(node_t* source,
                     node_t** frontRef, node_t** backRef)
 {
@@ -164,7 +156,6 @@ void set_affinity(int core){
 }
 
 /* DNN List Functions */
-
 
 #ifdef DEBUG
 void print_list(char * name, task_list_t * task_list){
@@ -296,15 +287,26 @@ int enqueue(char * que_name, queue_t *q, int pid, double deadline){
     print_queue(que_name, q);
 }
 
-int dequeue_asyncswap(char * que_name, queue_t *q, resource_t *res){
+bool exist_current_swap_task(task_list_t * task_list){
+    for(task_info_t * task = task_list->head; task != NULL; task = task->next){
+        if(task -> state == SWAPOUT) return true;
+    }
+    return false;
+}
+
+int dequeue_asyncswap(char * que_name, queue_t *q, task_list_t *task_list, resource_t *res){
     if (q -> front == NULL){
-        //DEBUG_PRINT(RED"Waiting Queue empty\n"RESET);
         return -1;
     }
     
     node_t *target = q->front;
-    
+    task_info_t *target_task = find_task_by_pid(task_list, target->pid);
+
+    if(target_task->swap_curr != 0 && exist_current_swap_task(task_list)){
+        return -1;
+    }
     DEBUG_PRINT(BLUE"[%s] Dequeue Job(%d %f)\n"RESET,que_name, target->pid, target->deadline);
+    
     q->front = target->next;
 
     int target_pid = target->pid;
@@ -318,8 +320,6 @@ int dequeue_asyncswap(char * que_name, queue_t *q, resource_t *res){
     print_queue(que_name, q);
     return target_pid;
 }  
-
-
 
 
 int dequeue(char * que_name, queue_t *q, resource_t *res){
@@ -470,14 +470,15 @@ void do_register(task_list_t *task_list, reg_msg *msg){
 
 
 void deregister(task_list_t *task_list, reg_msg *msg, resource_t *res){
-    
     task_info_t *target = find_task_by_pid(task_list, msg -> pid);
     size_t used_memory_size = getmemorysize(*(target->m_entry));
     int pid=target -> pid;
-
-    close_channels(target);
-    de_register_task(task_list, target);
+    DEBUG_PRINT(RED"===== DE-REGISTRATION (%d)=====\n"RESET, pid);
     
+    close_channels(target);
+
+    de_register_task(task_list, target);
+    DEBUG_PRINT(RED"Task(%d) has been removed from task list\n"RESET, pid);
     mem_current -= used_memory_size;
     write(target->sch_dec_fd, &pid, sizeof(int));
     
@@ -533,17 +534,12 @@ void sch_request_handler(task_list_t *task_list, task_info_t *task, resource_t *
     }
 }
 
-
-
-
-
-
 cudaAPI mm_request_handler(task_list_t * proc_list, task_info_t * proc){
     req_msg *msg = (req_msg *)malloc(sizeof(req_msg));
     
     commErrchk(read(proc->mm_req_fd, msg, sizeof(req_msg)));
 
-    DEBUG_PRINT(GREEN"[REQEUST %d/%d] Index: %3d API: %15s Size: %lu\n"RESET, proc->id, proc->pid, msg->entry_index ,getcudaAPIString(msg->type), msg->size);
+    //DEBUG_PRINT(BLUE"[REQEUST %d/%d] Index: %3d API: %15s Size: %lu\n"RESET, proc->id, proc->pid, msg->entry_index ,getcudaAPIString(msg->type), msg->size);
     
     if(msg->type == _SWAPIN_){
         DEBUG_PRINT(GREEN "[SWAP IN] Reqested: %d, Size: %10lu\n"RESET, proc->pid, msg->size);
@@ -619,7 +615,6 @@ task_info_t* choose_victim(task_list_t* proc_list, task_info_t* proc){
     return victim;
 }
 
-
 size_t getmemorysize(map<int,size_t> entry){
     size_t total_size = 0;
     for(auto iter = entry.begin(); iter != entry.end(); iter++){
@@ -627,7 +622,6 @@ size_t getmemorysize(map<int,size_t> entry){
     }
     return total_size;
 }
-
 
 void init_decision_handler(int target_pid, task_list_t *task_list){
 
@@ -861,6 +855,7 @@ void close_channel(char * pipe_name){
 }
 
 void close_channels(task_info_t * task){
+    DEBUG_PRINT(RED"Channel closed - (%d)\n"RESET,task->pid);
     char sch_req_fd_name[50];
     char sch_dec_fd_name[50];
     char mm_req_fd_name[50];

@@ -18,16 +18,16 @@
 
 #define string(x) #x
 
-//#define BLUE "\x1b[34m"  //info 
-//#define GREEN "\x1b[32m" //highlight
-//#define RED "\x1b[31m" // error
-//#define RESET "\x1b[0m" 
+#define BLUE "\x1b[34m"  //info 
+#define GREEN "\x1b[32m" //highlight
+#define RED "\x1b[31m" // error
+#define RESET "\x1b[0m" 
 
 
-#define BLUE  //info 
-#define GREEN  //highlight
-#define RED   // error
-#define RESET  
+// #define BLUE  //info 
+// #define GREEN  //highlight
+// #define RED   // error
+// #define RESET  
 
 
 
@@ -118,29 +118,26 @@ typedef struct _MSG_PACKET_REQUEST{
 
 
 void Init();
+void Cleanup();
 int SendRequest( void* devPtr, cudaAPI type, size_t size);
 int SendRequest( void* devPtr, cudaAPI type, size_t size, int index);
-char * getcudaAPIString(cudaAPI type);
-void close_channels();
-void close_channel(char * pipe_name);
-void Cleanup();
-
 void add_entry(map<int,entry>* entry_list, int index,  void* devPtr, size_t size);
 void del_entry(map<int,entry>* entry_list,  void* devPtr);
-
 void add_swap_entry(map<int,gswap>* entry_list, int index, void* origPtr, void* gpuPtr,  void* cpuPtr, size_t size);
 void del_swap_entry(map<int,gswap>* entry_list,  void* devPtr);
-
 int find_index_by_ptr(map<int,entry>* entry_list,  void* devPtr);
 bool exist_in_entry(map<int,entry> * entry_list, void *devPtr);
-int floorSearch(void * addr);
+
 void swapout(int signum);
 void swapin(int signum);
+void * check_pointer_arithmetic(void *, const char*);
+
+char * getcudaAPIString(cudaAPI type);
+int floorSearch(void * addr);
+float checksum(float * input, int size);
 void DEBUG_PRINT_SWAP();
 void DEBUG_PRINT_PAGETABLE();
 void DEBUG_PRINT_ENTRY();
-void * check_pointer_arithmetic(void *, const char*);
-float checksum(float * input, int size);
 
 /* CUDA memory hook */
 static cudaError_t (*lcudaMalloc)(void **, size_t) = (cudaError_t (*) (void**, size_t))dlsym(RTLD_NEXT,"cudaMalloc");

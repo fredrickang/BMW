@@ -2,6 +2,7 @@
 #include <time.h>
 #include <assert.h>
 
+
 #ifdef SCHEDULER
 int Sync = 1;
 struct timespec *release_time = NULL;
@@ -102,24 +103,6 @@ void timespec_add (struct timespec *left,
       left->tv_nsec -= 1000000000;
     }
 }
-
-void deregistration(void){
-    typedef struct _MSG_PACKET_REG{
-        int regist;
-        int pid;
-        int priority;
-    }reg_msg;
-
-    reg_msg * dereg = (reg_msg *)malloc(sizeof(reg_msg));
-    dereg->regist = 0;
-    dereg->pid = getpid();
-    dereg->priority = 0;
-    int ack;
-    write(register_fd, dereg, sizeof(int)*REG_MSG_SIZE);
-    read(decision_fd, &ack, sizeof(int));
-    fprintf(stderr, "Scheduler deregistration done\n");
-}
-
 #endif
 
 
@@ -577,11 +560,6 @@ void top_predictions(network *net, int k, int *index)
     top_k(net->output, net->outputs, k, index);
 }
 
-
-
-
-
-
 float *network_predict(network *net, float *input)
 {
 #ifdef LOG
@@ -589,7 +567,6 @@ float *network_predict(network *net, float *input)
     sched_s = what_time_is_it_now();
 #endif
 #ifdef SCHEDULER
-    if(Sync) atexit(deregistration);
     if(release_time != NULL){
         clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &release_time, NULL);
         timespec_add(release_time, &net->period);

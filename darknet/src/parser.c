@@ -773,6 +773,25 @@ int is_network(section *s)
             || strcmp(s->type, "[network]")==0);
 }
 
+#ifdef SCHEDULER
+void deregistration(void){
+    typedef struct _MSG_PACKET_REG{
+        int regist;
+        int pid;
+        int priority;
+    }reg_msg;
+
+    reg_msg * dereg = (reg_msg *)malloc(sizeof(reg_msg));
+    dereg->regist = 0;
+    dereg->pid = getpid();
+    dereg->priority = 0;
+    int ack;
+    write(register_fd, dereg, sizeof(reg_msg));
+    read(decision_fd, &ack, sizeof(int));
+    fprintf(stderr, "===YOLOv3 Task Terminated===\n");
+}
+#endif
+
 network *parse_network_cfg(char *filename)
 {
     list *sections = read_cfg(filename);
@@ -801,6 +820,7 @@ network *parse_network_cfg(char *filename)
     free_section(s);
 
 #ifdef SCHEDULER
+    atexit(deregistration); 
     struct sched_param prior;
     memset(&prior, 0, sizeof(struct sched_param));
     prior.sched_priority = 50;

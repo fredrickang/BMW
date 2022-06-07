@@ -33,14 +33,8 @@ double swap_in_time = 0.0;
 
 static size_t SWAPOUT_SIZE = 0;
 
-double what_time_is_it_now()
-{
-    struct timeval time;
-    if (gettimeofday(&time,NULL)){
-        return 0;
-    }
-    return (double)time.tv_sec + (double)time.tv_usec * .000001;
-}
+
+/* =====CUDA Hooking APIs===== */
 
 cudaError_t cudaMalloc(void **devPtr, size_t size){   
     cudaError_t err;
@@ -207,164 +201,8 @@ cudaError_t cudaLaunchKernel( const void* func, dim3 gridDim, dim3 blockDim, voi
     return err;
 }
 
-int floorSearch(void * addr){
-    int floor_idx = -1;
-    unsigned long long int floor_dist = LLONG_MAX;
 
-    for(auto iter = gpu_entry_list.begin(); iter !=gpu_entry_list.end(); iter++){
-        int index = iter->first;
-        void * key = iter->second.address;
-        if(key < addr && floor_dist > ((char *)addr - (char *)key)){
-            floor_idx = index;
-            floor_dist = ((char *)addr - (char *)key);
-        }
-    }
-    return floor_idx;
-}
-
-
-
-
-/* Swap-in handler */
-// 1. find how much space is needed for swapin
-// 2. request space to MMP
-// 3. copy memory into device
-
-// void swapin(int signum){
-//     double si_s, si_e;
-//     si_s = what_time_is_it_now();
-//     DEBUG_PRINT(GREEN "Swap-in (SIGUSR2) handler callback\n" RESET);
-//     void *dummy;
-//     SendRequest(dummy,_SWAPIN_,SWAPOUT_SIZE);
-//     DEBUG_PRINT(GREEN"space reservation done\n"RESET);
-//     for(auto iter = swap_entry_list.begin(); iter != swap_entry_list.end(); iter++){
-//         int index = iter->first;
-//         size_t size = iter->second.size;
-//         void* new_address;
-//         void* old_address = iter->second.gpu_address;
-//         void* orig_address = iter->second.origin_address;
-//         char* hostPtr = (char *)iter->second.cpu_address;
-
-//         CHECK_CUDA(lcudaMalloc(&new_address, size));
-//         CHECK_CUDA(lcudaMemcpy(new_address, hostPtr, size, cudaMemcpyHostToDevice));
-
-//         SendRequest(old_address,_cudaMalloc_, size, index);
-//         add_entry(&gpu_entry_list, index, orig_address, size);
-
-//         free(hostPtr);
-//         /* page table update */
-//         DEBUG_PRINT(GREEN "Swap in Addr: %p, Size: %d\n" RESET, new_address, size);
-//         pagetable[orig_address] = new_address;
-//         swap_in_sz_tot += size;
-//     } 
-//     SWAPOUT_SIZE = 0;
-//     swap_entry_list.clear();
-//     DEBUG_PRINT_SWAP();
-//     DEBUG_PRINT_ENTRY();
-//     DEBUG_PRINT_PAGETABLE();
-//     si_e = what_time_is_it_now();
-//     swap_in_time += (si_e - si_s);
-// }
-
-void swapin(int signum){
-    DEBUG_PRINT(GREEN "Swap-in (SIGUSR2) handler callback\n" RESET);
-    in_msg *msg = (in_msg *)malloc(sizeof(in_msg));
-    CHECK_COMM(read(decision_fd, msg, sizeof(in_msg)));
-    
-    size_t swapin_size = msg->size;
-    size_t process_size = 0;
-    
-    if(msg->type == 1) swapin_size = SWAPOUT_SIZE;
-    
-    DEBUG_PRINT(GREEN"MSG type(%d) Size(%lu)\n"RESET, msg->type, msg->size);
-    void *dummy;
-    SendRequest(dummy,_SWAPIN_,swapin_size);
-    DEBUG_PRINT(GREEN"Space(%lu) reservation done\n"RESET, swapin_size);
-    list<int> elist;
-
-    for(auto iter = swap_entry_list.rbegin(); iter != swap_entry_list.rend(); ++iter){
-        int index = iter->first;
-        elist.push_back(index);
-        size_t size = iter->second.size;
-        void* new_address;
-        void* old_address = iter->second.gpu_address;
-        void* orig_address = iter->second.origin_address;
-        char* hostPtr = (char *)iter->second.cpu_address;
-
-        CHECK_CUDA(lcudaMalloc(&new_address, size));
-        CHECK_CUDA(lcudaMemcpy(new_address, hostPtr, size, cudaMemcpyHostToDevice));
-
-        SendRequest(old_address,_cudaMalloc_, size, index);
-        add_entry(&gpu_entry_list, index, orig_address, size);
-
-        free(hostPtr);
-        /* page table update */
-        process_size += size;
-        DEBUG_PRINT(GREEN "Swap in Addr: %p, Size: %lu\n" RESET, new_address, size);
-        pagetable[orig_address] = new_address;
-        if(process_size >= swapin_size) break;        
-    } 
-    SWAPOUT_SIZE -= process_size;
-    //swap_entry_list.clear();
-    for(auto iter = elist.begin(); iter != elist.end(); iter++){
-        swap_entry_list.erase(swap_entry_list.find(*iter));
-    }
-    DEBUG_PRINT_SWAP();
-    DEBUG_PRINT_ENTRY();
-    DEBUG_PRINT_PAGETABLE();
-}
-
-
-
-
-
-/* Swap out handler */
-void swapout(int signum){
-    double so_s, so_e;
-    so_s = what_time_is_it_now();
-    DEBUG_PRINT(GREEN "Swap-out (SIGUSR1) handler callback\n" RESET);
-
-    int ack;
-    cudaError_t err;
-    
-    evict_msg *msg = (evict_msg *)malloc(sizeof(evict_msg));
-    CHECK_COMM(read(decision_fd, msg, sizeof(evict_msg)));
-    
-    DEBUG_PRINT(GREEN "Swap-out Range [%d, %d]\n" RESET,msg->start_idx, msg->end_idx);
-    
-    for(int i = msg->start_idx; i <=msg->end_idx; i++){
-        int index = i;
-        size_t size = gpu_entry_list[index].size;
-        void * oldaddress = gpu_entry_list[index].address;
-        void * newaddress = oldaddress;
-
-        if (pagetable.size() != 0 && pagetable.find(oldaddress)!=pagetable.end()){
-            newaddress = pagetable[oldaddress];
-        }
-        
-        void * hostPtr = (char *)malloc(size);
-        CHECK_CUDA(lcudaMemcpy(hostPtr, newaddress, size, cudaMemcpyDeviceToHost));
-
-        add_swap_entry(&swap_entry_list, index, oldaddress, newaddress, hostPtr, size);
-        SWAPOUT_SIZE += size;
-        CHECK_CUDA(lcudaFree(newaddress));
-        SendRequest(oldaddress, _cudaFree_, 0);
-        del_entry(&gpu_entry_list, oldaddress);    
-        
-        if(pagetable.size() != 0){
-            pagetable.erase(oldaddress);
-        }
-        DEBUG_PRINT(GREEN "Swap out Addr: %p, Size: %d\n" RESET, newaddress, size);
-        /* LOG */
-        swap_out_sz_tot += size;
-        
-    }
-    DEBUG_PRINT_ENTRY();
-    DEBUG_PRINT_SWAP();
-    DEBUG_PRINT_PAGETABLE();
-    so_e = what_time_is_it_now();
-    swap_out_time += (so_e - so_s);
-}
+/* =====BMW core===== */
 
 void* swapThread(void *vargsp){
 
@@ -386,28 +224,137 @@ void* swapThread(void *vargsp){
             DEBUG_PRINT(RED "SIGWAIT Error\n" RESET);
             exit(-1);
         }
-        switch(signum){
-            case SIGUSR1:
-                swapout(signum);
-                CHECK_COMM(write(request_fd, msg, sizeof(req_msg)));
-                DEBUG_PRINT(GREEN "Swap-out Complete\n" RESET);
-                SWAP_OUT = true; // swapped flag on
-                break;
-            case SIGUSR2:
-                if(SWAP_OUT) swapin(signum);
-                CHECK_COMM(write(request_fd, msg, sizeof(req_msg)));
-                DEBUG_PRINT(GREEN "Swap-in Complete\n" RESET);
-                if(SWAPOUT_SIZE == 0) SWAP_OUT = false;   // swapped flag off
-                break;
-            case SIGTERM:
-                DEBUG_PRINT(BLUE "Swap Thread Terminating\n" RESET);
-                exit(EXIT_SUCCESS);
-            default:
-                break;
+        if(signum == SIGUSR1){            
+            swapout(signum);
+            CHECK_COMM(write(request_fd, msg, sizeof(req_msg)));
+            DEBUG_PRINT(GREEN "Swap-out Complete\n" RESET);
+            SWAP_OUT = true; // swapped flag on
+        }
+        if(signum == SIGUSR2){
+            if(SWAP_OUT) swapin(signum);
+            CHECK_COMM(write(request_fd, msg, sizeof(req_msg)));
+            DEBUG_PRINT(GREEN "Swap-in Complete\n" RESET);
+            if(SWAPOUT_SIZE == 0) SWAP_OUT = false;   // swapped flag off
+        }
+        if(signum == SIGTERM){
+            DEBUG_PRINT(GREEN "Swap Thread Terminating\n" RESET);
+            break;
         }
     }
 
 }
+
+/* Swap-in handler */
+void swapin(int signum){
+    DEBUG_PRINT(GREEN "Swap-in (SIGUSR2) handler callback\n" RESET);
+    
+    in_msg *msg = (in_msg *)malloc(sizeof(in_msg));
+    CHECK_COMM(read(decision_fd, msg, sizeof(in_msg)));
+    DEBUG_PRINT(GREEN"MSG type(%d) Size(%lu)\n"RESET, msg->type, msg->size);
+
+    size_t swapin_size, process_size;
+    swapin_size = msg->type == 1 ? SWAPOUT_SIZE : msg->size;
+    process_size = 0;
+    
+    
+    void *dummy;
+    SendRequest(dummy,_SWAPIN_,swapin_size);
+    DEBUG_PRINT(GREEN"Space(%lu) reservation done\n"RESET, swapin_size);
+    
+    list<int> elist;
+    for(auto iter = swap_entry_list.rbegin(); iter != swap_entry_list.rend(); ++iter){
+        int index = iter->first;
+        size_t size = iter->second.size;
+        void* new_address;
+        void* old_address = iter->second.gpu_address;
+        void* orig_address = iter->second.origin_address;
+        char* hostPtr = (char *)iter->second.cpu_address;
+
+        elist.push_back(index);
+        CHECK_CUDA(lcudaMalloc(&new_address, size));
+        CHECK_CUDA(lcudaMemcpy(new_address, hostPtr, size, cudaMemcpyHostToDevice));
+
+        SendRequest(old_address,_cudaMalloc_, size, index);
+        
+        add_entry(&gpu_entry_list, index, orig_address, size);
+
+        free(hostPtr);
+        DEBUG_PRINT(GREEN "Swap in Addr: %p, Size: %lu\n" RESET, new_address, size);
+        
+        /* page table update */
+        process_size += size;
+        pagetable[orig_address] = new_address;
+        if(process_size >= swapin_size) break;        
+    } 
+    
+    SWAPOUT_SIZE -= process_size;
+
+    for(auto iter = elist.begin(); iter != elist.end(); iter++){
+        swap_entry_list.erase(swap_entry_list.find(*iter));
+    }
+    
+    DEBUG_PRINT_SWAP();
+    DEBUG_PRINT_ENTRY();
+    DEBUG_PRINT_PAGETABLE();
+}
+
+/* Swap out handler */
+void swapout(int signum){
+    DEBUG_PRINT(GREEN "Swap-out (SIGUSR1) handler callback\n" RESET);
+
+    int ack;
+    cudaError_t err;
+    
+    evict_msg *msg = (evict_msg *)malloc(sizeof(evict_msg));
+    CHECK_COMM(read(decision_fd, msg, sizeof(evict_msg)));
+    DEBUG_PRINT(GREEN "Swap-out Range [%d, %d]\n" RESET,msg->start_idx, msg->end_idx);
+    
+    for(int i = msg->start_idx; i <=msg->end_idx; i++){
+        int index = i;
+        size_t size = gpu_entry_list[index].size;
+        void * oldaddress = gpu_entry_list[index].address;
+        void * newaddress = oldaddress;
+
+        if (pagetable.size() != 0 && pagetable.find(oldaddress)!=pagetable.end()){
+            newaddress = pagetable[oldaddress];
+        }
+        
+        void * hostPtr = (char *)malloc(size);
+        CHECK_CUDA(lcudaMemcpy(hostPtr, newaddress, size, cudaMemcpyDeviceToHost));
+
+        add_swap_entry(&swap_entry_list, index, oldaddress, newaddress, hostPtr, size);
+        CHECK_CUDA(lcudaFree(newaddress));
+        SendRequest(oldaddress, _cudaFree_, 0);
+        del_entry(&gpu_entry_list, oldaddress);    
+        SWAPOUT_SIZE += size;
+        
+        DEBUG_PRINT(GREEN "Swap out Addr: %p, Size: %d\n" RESET, newaddress, size);   
+        if(pagetable.size() != 0){
+            pagetable.erase(oldaddress);
+        }
+    }
+    DEBUG_PRINT_ENTRY();
+    DEBUG_PRINT_SWAP();
+    DEBUG_PRINT_PAGETABLE();
+}
+
+void * check_pointer_arithmetic(void *devPtr, const char* func_name){
+    void *retPtr = devPtr;
+    int closest_idx = floorSearch(devPtr);
+    if(!exist_in_entry(&gpu_entry_list, devPtr) && closest_idx != -1){
+        void * base_pointer = gpu_entry_list[closest_idx].address;
+        if(pagetable.find(base_pointer) != pagetable.end()){
+            size_t dist = (char *)devPtr - (char *)base_pointer;
+            if(dist < gpu_entry_list[closest_idx].size){                    
+                void * corrected = (char *)pagetable[base_pointer] + dist;
+                retPtr = (void *)corrected;
+            }
+        }
+    }
+    return retPtr;
+}
+
+/* =====BMW Interface===== */
 
 void Init(){
 
@@ -415,19 +362,6 @@ void Init(){
     sigfillset(&sigsetmask_main);
     sigdelset(&sigsetmask_main, SIGINT);
     pthread_sigmask(SIG_SETMASK, &sigsetmask_main, NULL);
-
-    // if((register_fd = open(REGISTRATION, O_WRONLY)) < 0){
-    //     DEBUG_PRINT(RED "REGISTRATION CHANNEL OPEN FAIL\n" RESET);
-    //     exit(-1);
-    // }
-
-    // reg_msg *reg = (reg_msg *)malloc(sizeof(reg_msg));
-    // reg->reg_type = 1;
-    // reg->pid = getpid();
-
-    // CHECK_COMM(write(register_fd, reg, sizeof(reg_msg)))
-    
-    // DEBUG_PRINT(BLUE "Registrated\n" RESET);
 
     char request[30];
     char decision[30];
@@ -451,23 +385,11 @@ void Init(){
 void Cleanup(){
     DEBUG_PRINT(BLUE "Cleaning up...\n" RESET);
     int ack;
-    DEBUG_PRINT(BLUE "==De-registration done==\n" RESET);
     
-    //kill(0, SIGTERM);
-    //pthread_join(swap_thread_id, NULL);
+    pthread_kill(swap_thread_id, SIGTERM);
+    pthread_join(swap_thread_id, NULL);
     DEBUG_PRINT(BLUE "Swap Thread terminated\n" RESET);
-    /* LOG */
-#ifdef LOG
-    char logname[300];
-    snprintf(logname, 300, "/home/xavier5/BMW/darknet/logs/swap_detail_log_%d.log",getpid());
-    FILE *fp = fopen(logname, "a");
-    fprintf(fp, "swap_in_sz_tot: %lld\n", swap_in_sz_tot);
-    fprintf(fp, "swap_out_sz_tot: %lld\n", swap_out_sz_tot);
-    fprintf(fp, "swap_in_time: %f\n", swap_in_time);
-    fprintf(fp, "swap_out_time: %f\n", swap_out_time);
-    fclose(fp);
-#endif
-    DEBUG_PRINT(GREEN "==Termination Sequence Done==\n" RESET);
+    DEBUG_PRINT(GREEN "==BMW Termination Sequence Done==\n" RESET);
 }
 
 int SendRequest(void* devPtr, cudaAPI type, size_t size){
@@ -502,6 +424,56 @@ int SendRequest(void* devPtr, cudaAPI type, size_t size, int index){
     CHECK_COMM(write(request_fd, msg, sizeof(req_msg)));
     CHECK_COMM(read(decision_fd, &ack, sizeof(int)));
 }
+
+void add_entry(map<int,entry> *entry_list, int index, void* devPtr, size_t size){
+    DEBUG_PRINT(BLUE "Add: {%d, [%p, %d]}\n" RESET, index, devPtr, size);
+    entry tmp;
+    tmp.address = devPtr;
+    tmp.size = size;
+    (*entry_list).insert({index, tmp});
+}
+
+void del_entry(map<int,entry> *entry_list, void* devPtr){
+    DEBUG_PRINT(BLUE "Del: %p\n" RESET, devPtr);
+    (*entry_list).erase(find_index_by_ptr(entry_list, devPtr));
+}
+
+
+int find_index_by_ptr(map<int,entry> *entry_list, void* ptr){
+    auto iter = (*entry_list).begin();
+
+    while(iter != (*entry_list).end() && iter->second.address != ptr ){
+        ++iter;
+    }
+
+    if(iter ==(*entry_list).end() && iter->second.address != ptr) {
+        DEBUG_PRINT(RED "Can't find ptr inside entry\n" RESET);
+        exit(-1);
+    }
+    return iter->first;
+}
+
+bool exist_in_entry(map<int,entry> *entry_list, void *ptr){
+    auto iter = (*entry_list).begin();
+    while(iter != (*entry_list).end() && iter->second.address != ptr){
+        ++ iter;
+    }
+    if (iter == (*entry_list).end() && iter->second.address != ptr) return false;
+    return true;
+}
+
+void add_swap_entry(map<int,gswap>* entry_list, int index, void* origPrt, void* gpuPtr, void* cpuPtr, size_t size){
+    DEBUG_PRINT(BLUE "Add (Swap): {%d, [%p, %p, %p, %lu]}\n" RESET, index, origPrt, gpuPtr, cpuPtr, size);
+    gswap tmp;
+    tmp.origin_address = origPrt;
+    tmp.gpu_address = gpuPtr;
+    tmp.cpu_address = cpuPtr;
+    tmp.size = size;
+    (*entry_list).insert({index, tmp});
+}
+
+
+/*  ===== Utils ===== */
 
 #ifdef DEBUG2
 void DEBUG_PRINT_ENTRY(){
@@ -562,53 +534,13 @@ float checksum(float * input, int size){
     return sum;
 }
 
-
-void add_entry(map<int,entry> *entry_list, int index, void* devPtr, size_t size){
-    DEBUG_PRINT(BLUE "Add: {%d, [%p, %d]}\n" RESET, index, devPtr, size);
-    entry tmp;
-    tmp.address = devPtr;
-    tmp.size = size;
-    (*entry_list).insert({index, tmp});
-}
-
-void del_entry(map<int,entry> *entry_list, void* devPtr){
-    DEBUG_PRINT(BLUE "Del: %p\n" RESET, devPtr);
-    (*entry_list).erase(find_index_by_ptr(entry_list, devPtr));
-}
-
-
-int find_index_by_ptr(map<int,entry> *entry_list, void* ptr){
-    auto iter = (*entry_list).begin();
-
-    while(iter != (*entry_list).end() && iter->second.address != ptr ){
-        ++iter;
+double what_time_is_it_now()
+{
+    struct timeval time;
+    if (gettimeofday(&time,NULL)){
+        return 0;
     }
-
-    if(iter ==(*entry_list).end() && iter->second.address != ptr) {
-        DEBUG_PRINT(RED "Can't find ptr inside entry\n" RESET);
-        exit(-1);
-    }
-    return iter->first;
-}
-
-bool exist_in_entry(map<int,entry> *entry_list, void *ptr){
-    auto iter = (*entry_list).begin();
-    while(iter != (*entry_list).end() && iter->second.address != ptr){
-        ++ iter;
-    }
-    if (iter == (*entry_list).end() && iter->second.address != ptr) return false;
-    return true;
-}
-
-
-void add_swap_entry(map<int,gswap>* entry_list, int index, void* origPrt, void* gpuPtr, void* cpuPtr, size_t size){
-    DEBUG_PRINT(BLUE "Add (Swap): {%d, [%p, %p, %p, %lu]}\n" RESET, index, origPrt, gpuPtr, cpuPtr, size);
-    gswap tmp;
-    tmp.origin_address = origPrt;
-    tmp.gpu_address = gpuPtr;
-    tmp.cpu_address = cpuPtr;
-    tmp.size = size;
-    (*entry_list).insert({index, tmp});
+    return (double)time.tv_sec + (double)time.tv_usec * .000001;
 }
 
 char * getcudaAPIString(cudaAPI type){
@@ -621,18 +553,17 @@ char * getcudaAPIString(cudaAPI type){
 }
 
 
-void * check_pointer_arithmetic(void *devPtr, const char* func_name){
-    void *retPtr = devPtr;
-    int closest_idx = floorSearch(devPtr);
-    if(!exist_in_entry(&gpu_entry_list, devPtr) && closest_idx != -1){
-        void * base_pointer = gpu_entry_list[closest_idx].address;
-        if(pagetable.find(base_pointer) != pagetable.end()){
-            size_t dist = (char *)devPtr - (char *)base_pointer;
-            if(dist < gpu_entry_list[closest_idx].size){                    
-                void * corrected = (char *)pagetable[base_pointer] + dist;
-                retPtr = (void *)corrected;
-            }
+int floorSearch(void * addr){
+    int floor_idx = -1;
+    unsigned long long int floor_dist = LLONG_MAX;
+
+    for(auto iter = gpu_entry_list.begin(); iter !=gpu_entry_list.end(); iter++){
+        int index = iter->first;
+        void * key = iter->second.address;
+        if(key < addr && floor_dist > ((char *)addr - (char *)key)){
+            floor_idx = index;
+            floor_dist = ((char *)addr - (char *)key);
         }
     }
-    return retPtr;
+    return floor_idx;
 }

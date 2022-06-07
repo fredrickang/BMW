@@ -82,7 +82,7 @@ int main(int argc, char **argv){
                     send_release_time(task_list, gpu->waiting, swap_in->waiting);
                     sync = 0;
                 }
-                if(gpu -> state == IDLE) target_pid = dequeue("GPU", gpu->waiting, gpu);
+                if(gpu -> state == IDLE) target_pid = dequeue_asyncswap("GPU", gpu->waiting, task_list, gpu);
                 if(target_pid != -1) decision_handler(target_pid, task_list, swap_in);
             }
         }
