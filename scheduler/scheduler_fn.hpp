@@ -33,8 +33,8 @@ inline void commAssert(int code, const char *file, int line){
 }
 
 #ifdef DEBUG
-#define DEBUG_PRINT(fmt, args...) fprintf(stderr, "[scheduler][%s:%3d:%30s()]: " fmt, \
-__FILE__, __LINE__, __func__, ##args)
+#define DEBUG_PRINT(fmt, args...) fprintf(stderr, "[scheduler][%s:%3d:%30s()] - [%.4f]: " fmt, \
+__FILE__, __LINE__, __func__, what_time_is_it_now(),##args)
 #else
 #define DEBUG_PRINT(fmt, args...) 
 #endif

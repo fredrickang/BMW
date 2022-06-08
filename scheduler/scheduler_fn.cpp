@@ -79,7 +79,6 @@ void FrontBackSplit(node_t* source,
     slow = source;
     fast = source->next;
  
-    /* Advance 'fast' two nodes, and advance 'slow' one node */
     while (fast != NULL) {
         fast = fast->next;
         if (fast != NULL) {
@@ -87,9 +86,7 @@ void FrontBackSplit(node_t* source,
             fast = fast->next;
         }
     }
- 
-    /* 'slow' is before the midpoint in the list, so split it in two
-    at that point. */
+
     *frontRef = source;
     *backRef = slow->next;
     slow->next = NULL;
@@ -171,7 +168,7 @@ void print_list(char * name, task_list_t * task_list){
 
 void print_queue(char * name, queue_t * q){
     node_t * head =  q -> front;
-    DEBUG_PRINT(BLUE"%s : ", name);
+    DEBUG_PRINT(BLUE"[%s]: ", name);
     if (head == NULL) 
         fprintf(stderr, "Empty Queue"); 
   
@@ -201,7 +198,7 @@ void register_task(task_list_t *task_list, task_info_t *task){
     if(task_list->head == NULL){
         task_list->head = task;
         task_list->count++;
-        print_list("TaskList", task_list);
+        print_list("[TaskList]", task_list);
         return;
     }
     task->next = task_list->head;
@@ -218,7 +215,7 @@ void de_register_task(task_list_t *task_list, task_info_t *task){
         task_list->head = task->next;
         free(task);
         task_list->count--;
-        print_list("TaskList", task_list);
+        print_list("[TaskList]", task_list);
         return;
     }
     tmp = task_list->head;
@@ -229,7 +226,7 @@ void de_register_task(task_list_t *task_list, task_info_t *task){
     prev->next = task->next;
     free(task);
     task_list->count--;
-    print_list("TaskList", task_list);
+    print_list("[TaskList]", task_list);
     return;
 } 
 
@@ -261,7 +258,7 @@ queue_t *create_queue(){
 }
 
 int enqueue(char * que_name, queue_t *q, int pid, double deadline){
-    DEBUG_PRINT(BLUE"[%s] Enqueue Job(%d %f)\n"RESET, que_name, pid, deadline);
+    DEBUG_PRINT(BLUE"[%s]: Enqueue Job(%d %f)\n"RESET, que_name, pid, deadline);
     node_t *tmp = new_node(pid, deadline);
 
     q->count ++;
@@ -305,7 +302,7 @@ int dequeue_asyncswap(char * que_name, queue_t *q, task_list_t *task_list, resou
     if(target_task->swap_curr != 0 && exist_current_swap_task(task_list)){
         return -1;
     }
-    DEBUG_PRINT(BLUE"[%s] Dequeue Job(%d %f)\n"RESET,que_name, target->pid, target->deadline);
+    DEBUG_PRINT(BLUE"[%s]: Dequeue Job(%d %f)\n"RESET,que_name, target->pid, target->deadline);
     
     q->front = target->next;
 
@@ -330,7 +327,7 @@ int dequeue(char * que_name, queue_t *q, resource_t *res){
     
     node_t *target = q->front;
     
-    DEBUG_PRINT(BLUE"[%s] Dequeue Job(%d %f)\n"RESET,que_name, target->pid, target->deadline);
+    DEBUG_PRINT(BLUE"[%s]: Dequeue Job(%d %f)\n"RESET,que_name, target->pid, target->deadline);
     q->front = target->next;
 
     int target_pid = target->pid;
@@ -363,7 +360,7 @@ int dequeue_backward(char * que_name, queue_t *q, resource_t *res){
     else{
         prev->next = NULL;
     }
-    DEBUG_PRINT(BLUE"[%s] Dequeue Job(%d %f)\n"RESET,que_name, target->pid, target->deadline);
+    DEBUG_PRINT(BLUE"[%s]: Dequeue Job(%d %f)\n"RESET,que_name, target->pid, target->deadline);
     
     int target_pid = target->pid;
 
@@ -478,7 +475,7 @@ void deregister(task_list_t *task_list, reg_msg *msg, resource_t *res){
     close_channels(target);
 
     de_register_task(task_list, target);
-    DEBUG_PRINT(RED"Task(%d) has been removed from task list\n"RESET, pid);
+    DEBUG_PRINT(RED"Task(%d) Removed\n"RESET, pid);
     mem_current -= used_memory_size;
     write(target->sch_dec_fd, &pid, sizeof(int));
     
@@ -504,14 +501,14 @@ void sch_request_handler(task_list_t *task_list, task_info_t *task, resource_t *
     }
 
     if(init_que -> state == BUSY && init_que -> pid == task -> pid){
-        DEBUG_PRINT(GREEN"Init done(%d) - %f\n"RESET,task->pid, what_time_is_it_now());
+        DEBUG_PRINT(GREEN"Init done(%d)\n"RESET,task->pid);
         init_que -> state = IDLE;
         init_que -> pid = -1;
         task -> state = ALIVE;
     }
     
     if(res -> state == BUSY && res -> pid == task->pid){ /* Job termniation */
-        DEBUG_PRINT(GREEN"Term Job(%d) - %f\n"RESET,task->pid, what_time_is_it_now());
+        DEBUG_PRINT(GREEN"Term Job(%d)\n"RESET,task->pid);
         res -> state = IDLE;
         res -> pid = -1;
         // swap out 
@@ -522,13 +519,13 @@ void sch_request_handler(task_list_t *task_list, task_info_t *task, resource_t *
 
             if(highest_task->swap_curr > (MEM_LIMIT - mem_current) && task->swap_max != 0){
                 size_t outted = swapout_async(task_list, task, (highest_task->swap_curr - (MEM_LIMIT - mem_current)));
-                DEBUG_PRINT(GREEN"Swap Out(%d) - %10lu\n"RESET,task->pid, outted);
+                DEBUG_PRINT(GREEN"Swap Out(%d) amount: %10lu\n"RESET,task->pid, outted);
             }
         }
     }
     else{ /* Job release */
         update_deadline(task, task->deadline);
-        DEBUG_PRINT(GREEN"Release Job(%d) - %f\n"RESET,task->pid, what_time_is_it_now());
+        DEBUG_PRINT(GREEN"Release Job(%d)\n"RESET,task->pid);
         enqueue("GPU", res->waiting, task->pid, task->deadline);
         if(task->swap_curr != 0) enqueue("SwapIn", swap_in->waiting, task->pid, task->deadline);
     }
@@ -657,7 +654,7 @@ void decision_handler(int target_pid, task_list_t *task_list, resource_t *swap_i
 #ifdef LOG
     fprintf(fps[target->priority-1],"%f,",(swap_e- swap_s));
 #endif
-    DEBUG_PRINT(GREEN"Scheduled Job(%d)\n"RESET,target->pid);    
+    DEBUG_PRINT(GREEN"Scheduled Job(%d)\n"RESET,target->pid);
     commErrchk(write(target->sch_dec_fd ,&ack,sizeof(int)));
 }
 
@@ -893,10 +890,6 @@ int make_fdset(fd_set *readfds, int reg_fd, task_list_t *task_list){
     }
     return fd_head;
 }
-
-
-
-
 
 char * getcudaAPIString(cudaAPI type){
     switch (type){
