@@ -33,6 +33,9 @@ double swap_in_time = 0.0;
 
 static size_t SWAPOUT_SIZE = 0;
 
+/* overehad profiling */
+double logs[100000];
+static int log_idx = 0;
 
 /* =====CUDA Hooking APIs===== */
 
@@ -44,7 +47,7 @@ cudaError_t cudaMalloc(void **devPtr, size_t size){
         return cudaSuccess;
     }
 
-    DEBUG_PRINT(BLUE "cudaMalloc [%d]\n" RESET, size);
+    DEBUG_PRINT(BLUE "cudaMalloc [%lu]\n" RESET, size);
 
     SendRequest(*devPtr, _cudaMalloc_, size);
     err = lcudaMalloc(devPtr, size);
@@ -319,8 +322,12 @@ void swapout(int signum){
             newaddress = pagetable[oldaddress];
         }
         
+        /* Overhead profiling */
+        double st = what_time_is_it_now();
         void * hostPtr = (char *)malloc(size);
         CHECK_CUDA(lcudaMemcpy(hostPtr, newaddress, size, cudaMemcpyDeviceToHost));
+        logs[log_idx] = what_time_is_it_now() - st;
+        log_idx++;
 
         add_swap_entry(&swap_entry_list, index, oldaddress, newaddress, hostPtr, size);
         CHECK_CUDA(lcudaFree(newaddress));
@@ -328,11 +335,21 @@ void swapout(int signum){
         del_entry(&gpu_entry_list, oldaddress);    
         SWAPOUT_SIZE += size;
         
-        DEBUG_PRINT(GREEN "Swap out Addr: %p, Size: %d\n" RESET, newaddress, size);   
+        DEBUG_PRINT(GREEN "Swap out Addr: %p, Size: %lu\n" RESET, newaddress, size);   
         if(pagetable.size() != 0){
             pagetable.erase(oldaddress);
         }
     }
+
+        /* overhead profiling */
+    char filename[50];
+    snprintf(filename, 50, "./ov_profile_%d.log", getpid());
+    FILE *fp = fopen(filename,"w");
+    for(int  i =0; i < log_idx; i++){
+        fprintf(fp, "%d,%f\n",i,logs[i]);
+    }
+    fclose(fp);
+
     DEBUG_PRINT_ENTRY();
     DEBUG_PRINT_SWAP();
     DEBUG_PRINT_PAGETABLE();
@@ -383,11 +400,16 @@ void Init(){
 }
 
 void Cleanup(){
+
+
     DEBUG_PRINT(BLUE "Cleaning up...\n" RESET);
     int ack;
     
     pthread_kill(swap_thread_id, SIGTERM);
     pthread_join(swap_thread_id, NULL);
+    
+
+    
     DEBUG_PRINT(BLUE "Swap Thread terminated\n" RESET);
     DEBUG_PRINT(GREEN "==BMW Termination Sequence Done==\n" RESET);
 }
@@ -426,7 +448,7 @@ int SendRequest(void* devPtr, cudaAPI type, size_t size, int index){
 }
 
 void add_entry(map<int,entry> *entry_list, int index, void* devPtr, size_t size){
-    DEBUG_PRINT(BLUE "Add: {%d, [%p, %d]}\n" RESET, index, devPtr, size);
+    DEBUG_PRINT(BLUE "Add: {%d, [%p, %lu]}\n" RESET, index, devPtr, size);
     entry tmp;
     tmp.address = devPtr;
     tmp.size = size;
@@ -480,7 +502,7 @@ void DEBUG_PRINT_ENTRY(){
     DEBUG_PRINT(BLUE "Current GPU Entry: ");
     auto iter = gpu_entry_list.begin();
     while(iter != gpu_entry_list.end()){
-        fprintf(stderr, "{%d, [%p, %d]} ",iter->first, iter->second.address, iter->second.size);
+        fprintf(stderr, "{%d, [%p, %lu]} ",iter->first, iter->second.address, iter->second.size);
         ++iter;
     }
     fprintf(stderr,"\n" RESET);

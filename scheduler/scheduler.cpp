@@ -78,7 +78,8 @@ int main(int argc, char **argv){
 
             if( !(gpu->waiting->count < sync) && (init_que->waiting->count == 0)){
                 if(sync){
-                    init_memory_setting(gpu->waiting, task_list, swap_in);
+                    /* disable init memory setting due to overhead profile */
+                    //init_memory_setting(gpu->waiting, task_list, swap_in);
                     send_release_time(task_list, gpu->waiting, swap_in->waiting);
                     sync = 0;
                 }

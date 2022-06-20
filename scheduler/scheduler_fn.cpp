@@ -16,7 +16,9 @@
 
 
 //#define MEM_LIMIT 10737418240 //10GB
-#define MEM_LIMIT 16106127360 //15GB
+//#define MEM_LIMIT 16106127360 //15GB
+
+#define MEM_LIMIT 31838512888
 #define string(x) #x
 
 static size_t mem_current = 0;
@@ -131,11 +133,13 @@ char *find_char_arg(int argc, char **argv, char *arg, char *def)
 
 double what_time_is_it_now()
 {
-    struct timeval time;
-    if (gettimeofday(&time,NULL)){
-        return 0;
-    }
-    return (double)time.tv_sec + (double)time.tv_usec * .000001;
+    struct timespec time;
+    // if (gettimeofday(&time,NULL)){
+    //     return 0;
+    // }
+    if (clock_gettime(CLOCK_MONOTONIC, &time) == -1) exit(-1);
+    
+    return (double)time.tv_sec + (double)time.tv_nsec * 0.000000001;
 }
 
 void set_priority(int priority){
@@ -434,8 +438,9 @@ void do_register(task_list_t *task_list, reg_msg *msg){
     task -> scheduled_time = 0;
     task -> state = INIT;
 
-    task -> mem_size = 7131954632;
-    task -> swap_max = 6218888888;
+    /* mem size & swap max size should be fixed */
+    task -> mem_size = 27131954632;
+    task -> swap_max = 26218888888;
     if(task->id == 1) task -> swap_max = 0;
     task -> swap_curr = 0;
 

@@ -115,7 +115,7 @@ typedef struct _MSG_PACKET_REQUEST{
     size_t size;
 }req_msg;
 
-
+double what_time_is_it_now();
 
 void Init();
 void Cleanup();
